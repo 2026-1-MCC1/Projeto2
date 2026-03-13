@@ -11,7 +11,7 @@ Vide tutoriais do PI.
 </p>
 
 # Nome do Projeto
-Projeto
+Project X
 ## Nome do Grupo
 Grupo 2
 ## Integrantes: <a href="https://www.linkedin.com/in/kris-janjiulio-6152363b7/">Kris Pascali Janjiulio</a>, <a href="https://www.linkedin.com/in/victorbarq/">Guilherme da Silva Montes</a>, <a href="https://www.linkedin.com/in/pietra-ruiz-57b7643b3?/">Pietra Augusto Farias Ruiz</a>, <a href="https://www.linkedin.com/in/gabriel-cuentas-3a32433b7?/">Gabriel Fernando Cuentas Cruz</a>
