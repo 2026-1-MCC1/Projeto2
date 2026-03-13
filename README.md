@@ -13,7 +13,7 @@ Vide tutoriais do PI.
 # Nome do Projeto
 Projeto
 ## Nome do Grupo
-Grupo
+Grupo 2
 ## Integrantes: <a href="https://www.linkedin.com/in/kris-janjiulio-6152363b7/">Kris Pascali Janjiulio</a>, <a href="https://www.linkedin.com/in/victorbarq/">Guilherme da Silva Montes</a>, <a href="https://www.linkedin.com/in/pietra-ruiz-57b7643b3?/">Pietra Augusto Farias Ruiz</a>, <a href="https://www.linkedin.com/in/gabriel-cuentas-3a32433b7?/">Gabriel Fernando Cuentas Cruz</a>
 
 ## Professores Orientadores: <a href="https://www.linkedin.com/in/victorbarq/">Victor Bruno Alexander Rosetti de Quiroz</a>, <a href="https://www.linkedin.com/in/victorbarq/">Me. Saitama</a>, <a href="https://www.linkedin.com/in/victorbarq/">Dr. Strange</a>, <a href="https://www.linkedin.com/in/victorbarq/">Me. Yoda</a>, <a href="https://www.linkedin.com/in/victorbarq/">Dr. Gero</a>
