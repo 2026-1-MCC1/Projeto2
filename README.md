@@ -26,12 +26,7 @@ Grupo 2
 </p>
 
 
-De um a dois parágrafos sobre o que é seu projeto e o que ele faz.
-<br><br>
-Meu projeto ajuda estudantes FECAP a configurarem seus githubs.
-<br><br>
-May the force be with you!
-<br><br>
+Um jogo onde você assume o papel de funcionário de uma loja de conveniência, tendo de seguir os protocolos cada vez mais complexos ao longo da semana, ou arriscar ser demitido.
 
 ## 🛠 Estrutura de pastas
 
