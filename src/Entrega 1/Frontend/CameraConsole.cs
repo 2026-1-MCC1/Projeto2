@@ -29,7 +29,7 @@ public class CameraConsole : MonoBehaviour
             ShowCamera();
         }
 
-        if (CoolDownTimer <= 0) //Faz com que as câmeras tenham cooldown para trocar.
+        if (CoolDownTimer <= 0) //Faz com que as câmeras apenas troquem se o cooldown for zero ou menor.
         {
             if (Input.GetAxis("Horizontal") > 0) //Vai para a próxima câmera na lista.
             {
@@ -56,7 +56,7 @@ public class CameraConsole : MonoBehaviour
         }
         else
         {
-            CoolDownTimer -= Time.deltaTime; //Garante que o cooldown não trave.
+            CoolDownTimer -= Time.deltaTime; //Diminui o cooldown de troca de câmeras.
         }
     }
     private void ShowCamera()
