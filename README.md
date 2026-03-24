@@ -14,7 +14,7 @@ Vide tutoriais do PI.
 Would You Like Your Receipt?
 ## Nome do Grupo
 Grupo 2
-## Integrantes: <a href="https://www.linkedin.com/in/victorbarq/">Guilherme da Silva Montes</a>, <a href="https://www.linkedin.com/in/kris-janjiulio-6152363b7/">Kris Pascali Janjiulio</a>, <a href="https://www.linkedin.com/in/pietra-ruiz-57b7643b3?/">Pietra Augusto Farias Ruiz</a>, <a href="https://www.linkedin.com/in/gabriel-cuentas-3a32433b7?/">Gabriel Fernando Cuentas Cruz</a>
+## Integrantes: <a href="https://www.linkedin.com/in/guilherme-montes-640a37367">Guilherme da Silva Montes</a>, <a href="https://www.linkedin.com/in/kris-janjiulio-6152363b7/">Kris Pascali Janjiulio</a>, <a href="https://www.linkedin.com/in/pietra-ruiz-57b7643b3?/">Pietra Augusto Farias Ruiz</a>, <a href="https://www.linkedin.com/in/gabriel-cuentas-3a32433b7?/">Gabriel Fernando Cuentas Cruz</a>
 
 ## Professores Orientadores: <a href="https://www.linkedin.com/in/victorbarq/">Victor Bruno Alexander Rosetti de Quiroz</a>, <a href="https://www.linkedin.com/in//">Adriando Felix Valente</a>, <a href="https://www.linkedin.com/in//">Eduardo Savino Gomes</a>, <a href="https://www.linkedin.com/in//">Luis Fernando dos Santos Pires</a>
 
