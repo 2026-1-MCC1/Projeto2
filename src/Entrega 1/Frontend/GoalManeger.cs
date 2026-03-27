@@ -20,15 +20,13 @@ public class GoalManager : MonoBehaviour
 
     void Start()
     {
-        AtualizarUI();
-        barraProgresso.fillAmount = 0.5f;
+
     }
 
     // CHAMAR quando atender cliente
     public void ClienteAtendido()
     {
         clientesAtendidos++;
-        AtualizarUI();
         ChecarObjetivos();
     }
 
@@ -36,15 +34,7 @@ public class GoalManager : MonoBehaviour
     public void ProdutoVendido()
     {
         produtosVendidos++;
-        AtualizarUI();
         ChecarObjetivos();
-    }
-
-    void AtualizarUI()
-    {
-        textoObjetivos.text =
-            "Clientes: " + clientesAtendidos + "/" + clientesObjetivo +
-            "\nProdutos: " + produtosVendidos + "/" + produtosObjetivo;
     }
 
     void ChecarObjetivos()
