@@ -6,11 +6,22 @@ public class Pickup : MonoBehaviour
     [SerializeField] float throwForce = 150f;
     [SerializeField] float maxDistance = 3f;
     float distance;
+    public CameraConsole console; //Permite selecionar GameObject do script no inspetor da Unity para referenciar depois.
+    public BarraTeste barraTeste;
 
     TempParent tempParent;
     Rigidbody rb;
 
     Vector3 objPosition;
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (collision.gameObject.CompareTag("NPC"))
+        {
+            barraTeste.collided = barraTeste.collided + 1f;
+            Destroy(gameObject);
+        }
+    }
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -22,7 +33,9 @@ public class Pickup : MonoBehaviour
     void Update()
     {
         if(isHolding)
+        {
             Hold();
+        }
     }
 
     private void OnMouseDown()
@@ -62,6 +75,11 @@ public class Pickup : MonoBehaviour
         distance = Vector3.Distance(this.transform.position, tempParent.transform.position); //Compara distância do objeto com a posição do jogador para definir a distância entre os dois.
 
         if(distance >= maxDistance) //Solta o item se estiver longe demais.
+        {
+            Drop();
+        }
+
+        if(Input.GetKeyDown(console.OpenCameras))
         {
             Drop();
         }

@@ -23,6 +23,11 @@ public class GoalManager : MonoBehaviour
 
     }
 
+    void Update()
+    {
+
+    }
+
     // CHAMAR quando atender cliente
     public void ClienteAtendido()
     {
