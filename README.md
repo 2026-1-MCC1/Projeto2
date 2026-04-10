@@ -13,7 +13,7 @@ Vide tutoriais do PI.
 # Nome do Projeto
 Would You Like Your Receipt?
 ## Nome do Grupo
-Grupo 2
+O Efêmero Mercado Carmesim
 ## Integrantes: <a href="https://www.linkedin.com/in/guilherme-montes-640a37367">Guilherme da Silva Montes</a>, <a href="https://www.linkedin.com/in/kris-janjiulio-6152363b7/">Kris Pascali Janjiulio</a>, <a href="https://www.linkedin.com/in/pietra-ruiz-57b7643b3?/">Pietra Augusto Farias Ruiz</a>, <a href="https://www.linkedin.com/in/gabriel-cuentas-3a32433b7?/">Gabriel Fernando Cuentas Cruz</a>
 
 ## Professores Orientadores: <a href="https://www.linkedin.com/in/victorbarq/">Victor Bruno Alexander Rosetti de Quiroz</a>, <a href="https://www.linkedin.com/in//">Adriando Felix Valente</a>, <a href="https://www.linkedin.com/in//">Eduardo Savino Gomes</a>, <a href="https://www.linkedin.com/in//">Luis Fernando dos Santos Pires</a>
@@ -61,28 +61,14 @@ Há também 4 pastas que seguem da seguinte forma:
 
 ## 🛠 Instalação
 
-<b>Android:</b>
-
-Faça o Download do JOGO.apk no seu celular.
-Execute o APK e siga as instruções de seu telefone.
-
-```sh
-Coloque código do prompt de comnando se for necessário
-```
-
 <b>Windows:</b>
 
 Não há instalação! Apenas executável!
-Encontre o JOGO.exe na pasta executáveis e execute-o como qualquer outro programa.
+Encontre WYLYR.exe na pasta executáveis e execute-o como qualquer outro programa.
 
 ```sh
 Coloque código do prompt de comnando se for necessário
 ```
-
-<b>HTML:</b>
-
-Não há instalação!
-Encontre o index.html na pasta executáveis e execute-o como uma página WEB (através de algum browser).
 
 ## 💻 Configuração para Desenvolvimento
 
