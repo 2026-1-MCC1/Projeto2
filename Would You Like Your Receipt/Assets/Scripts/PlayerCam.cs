@@ -5,8 +5,7 @@ public class PlayerCam : MonoBehaviour
     public Transform player;
     public float mouseSens = 2f;
     float camRotationY = 0f;
-    //private bool CursorLock = true;
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
+   
     void Start()
     {
         //Trava e esconde o cursor do mouse
@@ -14,7 +13,6 @@ public class PlayerCam : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
     }
 
-    // Update is called once per frame
     void Update()
     {
         //Input do mouse

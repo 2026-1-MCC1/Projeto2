@@ -9,7 +9,7 @@ public class NPCInteraction : MonoBehaviour
     public Transform player;
 
     // Mensagem que o NPC vai falar
-    public string message = "Olá, cliente! Posso ajudar?";
+    public string message = "Olá, pode me ajudar?";
 
     void Update()
     {
@@ -22,7 +22,7 @@ public class NPCInteraction : MonoBehaviour
             // Verifica se o jogador apertou a tecla E
             if (Input.GetKeyDown(KeyCode.E))
             {
-                // Chama a função de interação
+               
                 Interact();
             }
         }
@@ -30,12 +30,9 @@ public class NPCInteraction : MonoBehaviour
 
     void Interact()
     {
-        // Exibe a mensagem no console (depois você pode trocar por UI)
-        Debug.Log("Interação com NPC.");
+        // Exibe a mensagem de teste no console 
+        Debug.Log("Olá.");
 
-        // Aqui vocês podem adicionar mais coisas:
-        // - abrir diálogo na tela
-        // - iniciar missão
-        // - tocar som
+       
     }
 }
