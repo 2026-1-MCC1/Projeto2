@@ -4,13 +4,12 @@ public class CameraConsole : MonoBehaviour
 {
     public GameObject[] Cameras;
     public int CurrentCam;
-    public KeyCode OpenCameras = KeyCode.Space;
+    public KeyCode OpenCameras = KeyCode.Space; // Ao apertar espaço, troca de câmeras
     public bool CamerasOpen;
     public GameObject MainCamera;
     public float CoolDownTimer;
-    public float CoolDownTime = 0.5f;
+    public float CoolDownTime = 0.5f; // Cooldown da troca de câmeras
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         for (int i = 0; i < Cameras.Length; i++) //Faz com que as câmeras sejam desativadas quando o jogo inicia. Se começarem desativadas, não podem ser ativadas depois.
@@ -20,7 +19,7 @@ public class CameraConsole : MonoBehaviour
         MainCamera.SetActive(true); //Garante que a câmera principal (Visão do personagem) inicia ativa.
     }
 
-    // Update is called once per frame
+    
     void Update()
     {
         if (Input.GetKeyDown(OpenCameras)) //Permite seleção de tecla para abrir e fechar câmera.
