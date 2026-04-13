@@ -4,7 +4,7 @@ public class CameraConsole : MonoBehaviour
 {
     public GameObject[] Cameras;
     public int CurrentCam;
-    public KeyCode OpenCameras;
+    public KeyCode OpenCameras = KeyCode.Space;
     public bool CamerasOpen;
     public GameObject MainCamera;
     public float CoolDownTimer;
