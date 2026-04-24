@@ -10,10 +10,8 @@ Vide tutoriais do PI.
 <a href= "https://www.fecap.br/"><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRhZPrRa89Kma0ZZogxm0pi-tCn_TLKeHGVxywp-LXAFGR3B1DPouAJYHgKZGV0XTEf4AE&usqp=CAU" alt="FECAP - Fundação de Comércio Álvares Penteado" border="0"></a>
 </p>
 
-# Nome do Projeto
-Would You Like Your Receipt?
-## Nome do Grupo
-O Efêmero Mercado Carmesim
+# Would you like your Receipt?
+## O Efêmero Mercado Carmesim
 ## Integrantes: <a href="https://www.linkedin.com/in/guilherme-montes-640a37367">Guilherme da Silva Montes</a>, <a href="https://www.linkedin.com/in/kris-janjiulio-6152363b7/">Kris Pascali Janjiulio</a>, <a href="https://www.linkedin.com/in/pietra-ruiz-57b7643b3?/">Pietra Augusto Farias Ruiz</a>, <a href="https://www.linkedin.com/in/gabriel-cuentas-3a32433b7?/">Gabriel Fernando Cuentas Cruz</a>
 
 ## Professores Orientadores: <a href="https://www.linkedin.com/in/victorbarq/">Victor Bruno Alexander Rosetti de Quiroz</a>, <a href="https://www.linkedin.com/in//">Adriando Felix Valente</a>, <a href="https://www.linkedin.com/in//">Eduardo Savino Gomes</a>, <a href="https://www.linkedin.com/in//">Luis Fernando dos Santos Pires</a>
