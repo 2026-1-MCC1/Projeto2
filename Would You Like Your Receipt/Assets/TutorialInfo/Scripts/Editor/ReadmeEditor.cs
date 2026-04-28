@@ -60,7 +60,7 @@ public class ReadmeEditor : Editor
 
             if (readme && !readme.loadedLayout)
             {
-                LoadLayout();
+                // Evita aplicar automaticamente o layout do template, o que pode gerar erros de Scene View apos reload.
                 readme.loadedLayout = true;
             }
         }

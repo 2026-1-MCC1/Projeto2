@@ -2,27 +2,55 @@ using UnityEngine;
 
 public class NPCInteraction : MonoBehaviour
 {
-    // Dist‚ncia m·xima para o jogador interagir com o NPC
+    // Dist√¢ncia m√°xima para o jogador interagir com o NPC
     public float interactionDistance = 3f;
 
-    // ReferÍncia ao jogador (Transform = posiÁ„o dele no mundo)
+    // Refer√™ncia ao jogador (Transform = posi√ß√£o dele no mundo)
     public Transform player;
 
     // Mensagem que o NPC vai falar
-    public string message = "Ol·, pode me ajudar?";
+    public string message = "Ol√°, pode me ajudar?";
+    public float messageDuration = 2f;
+
+    // Guarda a referencia para a UI que mostra as mensagens na tela.
+    private GoalManager goalManager;
+
+    private void Start()
+    {
+        if (player == null)
+        {
+            // Procura o jogador automaticamente caso ele nao tenha sido ligado no Inspector.
+            PlayerMovement playerMovement = Object.FindFirstObjectByType<PlayerMovement>();
+            if (playerMovement != null)
+            {
+                player = playerMovement.transform;
+            }
+        }
+
+        goalManager = GoalManager.Instance;
+        if (goalManager == null)
+        {
+            // Faz uma busca de seguranca caso a instancia ainda nao esteja preenchida.
+            goalManager = Object.FindFirstObjectByType<GoalManager>();
+        }
+    }
 
     void Update()
     {
-        // Calcula a dist‚ncia entre o NPC e o jogador
+        if (player == null)
+        {
+            return;
+        }
+
+        // Calcula a dist√¢ncia entre o NPC e o jogador
         float distance = Vector3.Distance(transform.position, player.position);
 
-        // Verifica se o jogador est· perto o suficiente
+        // Verifica se o jogador est√° perto o suficiente
         if (distance <= interactionDistance)
         {
             // Verifica se o jogador apertou a tecla E
             if (Input.GetKeyDown(KeyCode.E))
             {
-               
                 Interact();
             }
         }
@@ -30,9 +58,17 @@ public class NPCInteraction : MonoBehaviour
 
     void Interact()
     {
-        // Exibe a mensagem de teste no console 
-        Debug.Log("Ol·.");
+        if (goalManager != null)
+        {
+            // Mostra a fala do NPC no mesmo texto usado pelos objetivos.
+            goalManager.MostrarMensagem(message, messageDuration);
+        }
+        else
+        {
+            Debug.LogWarning("GoalManager was not found for NPCInteraction.", this);
+        }
 
-       
+        // Mantem a mensagem no Console para facilitar debug.
+        Debug.Log(message);
     }
 }

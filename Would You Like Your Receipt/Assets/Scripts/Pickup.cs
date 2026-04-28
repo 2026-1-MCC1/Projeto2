@@ -1,57 +1,70 @@
+using System.Globalization;
 using UnityEngine;
 
 public class Pickup : MonoBehaviour
 {
-    bool isHolding = false;
+    bool estaSegurando = false;
+    bool foiEscaneado = false;
+
     [SerializeField] float throwForce = 150f;
     [SerializeField] float maxDistance = 3f;
-    float distance;
-    public CameraConsole console; //Permite selecionar GameObject do script no inspetor da Unity para referenciar depois.
-    public BarraTeste barraTeste;
+    // Nome exibido na tela quando o produto for escaneado.
+    [SerializeField] string nomeProduto = "";
+    // Codigo opcional do produto.
+    [SerializeField] string codigoProduto = "";
+    // Preco exibido na tela quando o produto for escaneado.
+    [SerializeField] float precoProduto = 0f;
+    // Descricao curta do produto para a tela do scanner.
+    [SerializeField] string descricaoProduto = "";
+    // Define se o item deve sumir depois de ser escaneado.
+    [SerializeField] bool destruirAposEscanear = true;
+    // Mensagem opcional que aparece quando este item e escaneado.
+    [SerializeField] string mensagemEscaneamento = "";
+    [SerializeField] float duracaoMensagemEscaneamento = 2f;
+
+    public CameraConsole console; // Permite selecionar o console de cameras no Inspector.
 
     TempParent tempParent;
     Rigidbody rb;
-
     Vector3 objPosition;
 
-    private void OnCollisionEnter(Collision collision)
-    {
-        if (collision.gameObject.CompareTag("NPC"))
-        {
-            barraTeste.collided = barraTeste.collided + 1f;
-            Destroy(gameObject);
-        }
-    }
-    
     void Start()
     {
         rb = GetComponent<Rigidbody>();
         tempParent = TempParent.Instance;
+
+        if (console == null)
+        {
+            // Recupera a configuracao do console de cameras caso o campo esteja vazio.
+            console = Object.FindFirstObjectByType<CameraConsole>();
+        }
+
+        if (console == null)
+        {
+            Debug.LogWarning("CameraConsole was not found for Pickup.", this);
+        }
     }
 
-    // Update is called once per frame
     void Update()
     {
-        if(isHolding)
+        if (estaSegurando)
         {
-            Hold();
+            Segurar();
         }
     }
 
     private void OnMouseDown()
     {
-        //Pegar
+        // Pega o item se ele estiver perto o bastante do jogador.
         if (tempParent != null)
         {
-            distance = Vector3.Distance(this.transform.position, tempParent.transform.position); //Compara distância do objeto com a posição do jogador para definir a distância entre os dois.
+            float distance = Vector3.Distance(transform.position, tempParent.transform.position);
             if (distance <= maxDistance)
             {
-                isHolding = true;
+                estaSegurando = true;
                 rb.useGravity = false;
                 rb.detectCollisions = true;
-
-                this.transform.SetParent(tempParent.transform); //Faz com que o item segurado se torne filho do objeto vazio "TempParent" (Para que não precise aplicar o script em todo item que deseja ser interagível)
-
+                transform.SetParent(tempParent.transform);
             }
         }
         else
@@ -60,49 +73,122 @@ public class Pickup : MonoBehaviour
         }
     }
 
-    private void OnMouseUp() //Solta item ao soltar botão do mouse.
+    private void OnMouseUp()
     {
-        Drop();
+        // Solta o item ao soltar o botao do mouse.
+        Soltar();
     }
 
-    private void OnMouseExit() //Solta item ao mouse sair dos confins do objeto.
+    private void OnMouseExit()
     {
-        Drop();
+        // Solta o item quando o mouse sai do objeto.
+        Soltar();
     }
 
-    private void Hold()
+    private void Segurar()
     {
-        distance = Vector3.Distance(this.transform.position, tempParent.transform.position); //Compara distância do objeto com a posição do jogador para definir a distância entre os dois.
+        float distance = Vector3.Distance(transform.position, tempParent.transform.position);
 
-        if(distance >= maxDistance) //Solta o item se estiver longe demais.
+        // Solta o item se ele ficar longe demais do jogador.
+        if (distance >= maxDistance)
         {
-            Drop();
+            Soltar();
         }
 
-        if(Input.GetKeyDown(console.OpenCameras))
+        // Solta o item quando o console de cameras for aberto.
+        if (console != null && Input.GetKeyDown(console.OpenCameras))
         {
-            Drop();
+            Soltar();
         }
 
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
 
-        if(Input.GetMouseButtonDown(1))
+        // Joga o item para frente ao clicar com o botao direito.
+        if (Input.GetMouseButtonDown(1))
         {
-            //Joga item se clicar com o botão direito do mouse.
             rb.AddForce(tempParent.transform.forward * throwForce);
-            Drop();
+            Soltar();
         }
     }
 
-    private void Drop() //Função para soltar itens.
+    public bool TentarIniciarEscaneamento()
     {
-        if(isHolding)
+        if (foiEscaneado)
         {
-            isHolding = false;
-            objPosition = this.transform.position;
-            this.transform.position = objPosition;
-            this.transform.SetParent(null);
+            return false;
+        }
+
+        // Marca o item como lido para impedir escaneamentos duplicados.
+        foiEscaneado = true;
+
+        // Solta o item antes de finalizar a leitura para evitar conflitos com o objeto segurado.
+        Soltar();
+        return true;
+    }
+
+    public string ObterMensagemEscaneamento()
+    {
+        // Monta o texto com as informacoes do produto para mostrar na tela do scanner.
+        string nomeExibicao = string.IsNullOrWhiteSpace(nomeProduto) ? gameObject.name : nomeProduto;
+        string mensagem = "Produto: " + nomeExibicao;
+
+        if (!string.IsNullOrWhiteSpace(codigoProduto))
+        {
+            mensagem += "\nCodigo: " + codigoProduto;
+        }
+
+        if (precoProduto > 0f)
+        {
+            mensagem += "\nPreco: R$ " + precoProduto.ToString("F2", CultureInfo.GetCultureInfo("pt-BR"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(descricaoProduto))
+        {
+            mensagem += "\nInfo: " + descricaoProduto;
+        }
+
+        if (!string.IsNullOrWhiteSpace(mensagemEscaneamento))
+        {
+            mensagem += "\n\n" + mensagemEscaneamento;
+        }
+
+        return mensagem;
+    }
+
+    public string ObterNomeProduto()
+    {
+        return string.IsNullOrWhiteSpace(nomeProduto) ? gameObject.name : nomeProduto;
+    }
+
+    public float ObterPrecoProduto()
+    {
+        return precoProduto;
+    }
+
+    public float ObterDuracaoMensagemEscaneamento()
+    {
+        return duracaoMensagemEscaneamento;
+    }
+
+    public void FinalizarEscaneamento()
+    {
+        if (destruirAposEscanear)
+        {
+            // Remove o item da cena depois do escaneamento, se essa opcao estiver ligada.
+            Destroy(gameObject);
+        }
+    }
+
+    private void Soltar()
+    {
+        // Solta o item e devolve gravidade para ele.
+        if (estaSegurando)
+        {
+            estaSegurando = false;
+            objPosition = transform.position;
+            transform.position = objPosition;
+            transform.SetParent(null);
             rb.useGravity = true;
         }
     }
