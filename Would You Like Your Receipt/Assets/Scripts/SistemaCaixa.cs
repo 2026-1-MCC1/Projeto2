@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class SistemaCaixa : MonoBehaviour
@@ -17,9 +18,13 @@ public class SistemaCaixa : MonoBehaviour
     [SerializeField] Scanner scanner;           // scanner do caixa
     [SerializeField] GoalManager goalManager;   // sistema de pontuação
     [SerializeField] Transform jogador;         // player
-    [SerializeField] GameObject npcCliente;     // NPC cliente
-    [SerializeField] Pickup modeloProduto;      // prefab do produto
-    [SerializeField] Transform spawnProduto;
+    [SerializeField] GameObject[] npcs; // lista de NPCs possíveis
+    GameObject npcAtual;
+    [SerializeField] Pickup[] produtosPossiveis; // lista de produtos
+    [SerializeField] Transform[] pontosSpawn;    // posições na bancada
+
+    List<Pickup> produtosAtuais = new List<Pickup>();
+    [SerializeField] Transform spawnProduto; // spawn do produto
 
     // caminhos do NPC
     [SerializeField] Transform[] caminhoEntrada; // caminho até o caixa
@@ -75,8 +80,8 @@ public class SistemaCaixa : MonoBehaviour
                 jogador = player.transform;
         }
 
-        if (npcCliente == null)
-            npcCliente = GameObject.Find("NPC1");
+        if (npcAtual == null)
+            npcAtual = GameObject.Find("NPC1");
 
         if (modeloProduto == null)
         {
@@ -87,7 +92,7 @@ public class SistemaCaixa : MonoBehaviour
 
 
         // Se faltar algo importante, desativa o script
-        if (scanner == null || npcCliente == null || modeloProduto == null)
+        if (scanner == null || npcAtual == null || modeloProduto == null)
         {
             Debug.LogWarning("Faltando referências!");
             enabled = false;
@@ -95,10 +100,13 @@ public class SistemaCaixa : MonoBehaviour
         }
 
         // Guarda posição inicial do NPC (spawn)
-        posicaoSpawnNpc = npcCliente.transform.position;
+        posicaoSpawnNpc = npcAtual.transform.position;
 
-        // Esconde NPC e produto até usar
-        npcCliente.SetActive(false);
+        // escolhe NPC aleatório
+        int randomIndex = Random.Range(0, npcs.Length);
+
+        // cria o NPC
+        npcAtual = Instantiate(npcs[randomIndex], posicaoSpawnNpc, Quaternion.identity);
         modeloProduto.gameObject.SetActive(false);
 
         // Limpa UI
@@ -162,8 +170,8 @@ public class SistemaCaixa : MonoBehaviour
         trocoAtual = 0f;
         produtoAtual = null;
 
-        npcCliente.transform.position = posicaoSpawnNpc; // volta para spawn
-        npcCliente.SetActive(true); // ativa NPC
+        npcAtual.transform.position = posicaoSpawnNpc; // volta para spawn
+        npcAtual.SetActive(true); // ativa NPC
 
         indiceCaminho = 0; // reseta caminho
 
@@ -226,7 +234,7 @@ public class SistemaCaixa : MonoBehaviour
     // Quando o cliente vai embora
     private void AoClienteIrEmbora()
     {
-        npcCliente.SetActive(false); // desativa NPC
+        npcAtual.SetActive(false); // desativa NPC
         estadoAtual = EstadoCliente.AguardandoProximoCliente;
     }
 
@@ -237,13 +245,13 @@ public class SistemaCaixa : MonoBehaviour
 
         Transform destino = caminho[indiceCaminho]; // ponto atual
 
-        Vector3 posAtual = npcCliente.transform.position;
+        Vector3 posAtual = npcAtual.transform.position;
 
         // ignora altura (movimento no chão)
         Vector3 destinoPlano = new Vector3(destino.position.x, posAtual.y, destino.position.z);
 
         // move o NPC
-        npcCliente.transform.position = Vector3.MoveTowards(
+        npcAtual.transform.position = Vector3.MoveTowards(
             posAtual,
             destinoPlano,
             velocidadeNpc * Time.deltaTime
@@ -253,7 +261,7 @@ public class SistemaCaixa : MonoBehaviour
         Vector3 direcao = destinoPlano - posAtual;
         if (direcao.sqrMagnitude > 0.001f)
         {
-            npcCliente.transform.rotation = Quaternion.LookRotation(direcao.normalized);
+            npcAtual.transform.rotation = Quaternion.LookRotation(direcao.normalized);
         }
 
         // chegou no ponto
