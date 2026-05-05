@@ -1,58 +1,69 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class SistemaCaixa : MonoBehaviour
 {
-    // Estados do cliente (controla em que fase ele está)
+    // Estados do fluxo do cliente no caixa.
     enum EstadoCliente
     {
-        AguardandoProximoCliente, // esperando próximo cliente aparecer
-        IndoAoCaixa,              // cliente indo até o caixa
-        AguardandoEscaneamento,   // esperando você escanear o item
-        AguardandoTroco,          // esperando você entregar o troco
-        IndoEmbora                // cliente indo embora
+        AguardandoProximoCliente,
+        IndoAoCaixa,
+        AguardandoEscaneamento,
+        AguardandoTroco,
+        IndoEmbora
     }
 
-    // Referências principais
-    [SerializeField] Scanner scanner;           // scanner do caixa
-    [SerializeField] GoalManager goalManager;   // sistema de pontuação
-    [SerializeField] Transform jogador;         // player
-    [SerializeField] GameObject[] npcs; // lista de NPCs possíveis
-    GameObject npcAtual;
-    [SerializeField] Pickup[] produtosPossiveis; // lista de produtos
-    [SerializeField] Transform[] pontosSpawn;    // posições na bancada
+    // Referencias principais do sistema.
+    [SerializeField] Scanner scanner;
+    [SerializeField] GoalManager goalManager;
+    [SerializeField] Transform jogador;
 
-    List<Pickup> produtosAtuais = new List<Pickup>();
-    [SerializeField] Transform spawnProduto; // spawn do produto
+    // Modelos legados que ja existem na cena.
+    [SerializeField] GameObject npcCliente;
+    [SerializeField] Pickup modeloProduto;
+    [SerializeField] Transform spawnProduto;
 
-    // caminhos do NPC
-    [SerializeField] Transform[] caminhoEntrada; // caminho até o caixa
-    [SerializeField] Transform[] caminhoSaida;   // caminho para sair da loja
+    // Campos extras para cadastrar mais NPCs e produtos no Inspector.
+    [SerializeField] GameObject[] npcsExtras;
+    [SerializeField] Pickup[] produtosExtras;
 
-    int indiceCaminho = 0; // controla em qual ponto do caminho o NPC está
+    // Pontos de apoio para o fluxo de entrada e saida.
+    [SerializeField] Transform[] caminhoEntrada;
+    [SerializeField] Transform[] caminhoSaida;
+    [SerializeField] Transform[] pontosSpawn;
+    [SerializeField] Transform spawnNPC;
+    [SerializeField] Transform despawnNPC;
 
-    // Configurações
+    // Ajustes de comportamento.
     [SerializeField] float velocidadeNpc = 2.2f;
     [SerializeField] float tempoEntreClientes = 4f;
     [SerializeField] float distanciaEntregaTroco = 2.5f;
-    [SerializeField] KeyCode teclaEntregarTroco = KeyCode.T;
-
-    // Valores possíveis que o cliente pode pagar
     [SerializeField] float[] valoresPagamento = { 20f, 50f, 100f };
+    [SerializeField] bool evitarRepetirNpcEmSequencia = true;
+    [SerializeField] int maximoDigitosTroco = 6;
+
+    readonly List<GameObject> modelosNpc = new List<GameObject>();
+    readonly List<Pickup> modelosProduto = new List<Pickup>();
 
     EstadoCliente estadoAtual = EstadoCliente.AguardandoProximoCliente;
 
-    Vector3 posicaoSpawnNpc; // onde o NPC nasce
+    GameObject npcAtual;
+    Pickup produtoAtual;
+    Pickup modeloProdutoAtual;
 
-    Pickup produtoAtual; // produto atual sendo atendido
+    int ultimoIndiceNpc = -1;
 
-    float valorPagoAtual; // quanto o cliente pagou
-    float trocoAtual;     // troco a ser dado
+    float totalCompra;
+    float valorPago;
+    float troco;
 
-    bool sistemaPronto; // controla se tudo foi inicializado corretamente
+    bool sistemaPronto;
 
-    // Evento: quando um produto é escaneado
+    string trocoDigitadoEmCentavos = string.Empty;
+    string mensagemTrocoAtual = string.Empty;
+    string avisoTrocoAtual = string.Empty;
+
     private void OnEnable()
     {
         Scanner.ProdutoEscaneado += AoProdutoEscaneado;
@@ -65,97 +76,93 @@ public class SistemaCaixa : MonoBehaviour
 
     private void Awake()
     {
-        // Tenta encontrar referências automaticamente se não estiverem ligadas
-
         if (scanner == null)
+        {
             scanner = Object.FindFirstObjectByType<Scanner>();
+        }
 
         if (goalManager == null)
-            goalManager = Object.FindFirstObjectByType<GoalManager>();
+        {
+            goalManager = GoalManager.Instance;
+            if (goalManager == null)
+            {
+                goalManager = Object.FindFirstObjectByType<GoalManager>();
+            }
+        }
 
         if (jogador == null)
         {
-            PlayerMovement player = Object.FindFirstObjectByType<PlayerMovement>();
-            if (player != null)
-                jogador = player.transform;
+            PlayerMovement playerMovement = Object.FindFirstObjectByType<PlayerMovement>();
+            if (playerMovement != null)
+            {
+                jogador = playerMovement.transform;
+            }
         }
 
-        if (npcAtual == null)
-            npcAtual = GameObject.Find("NPC1");
+        // Reaproveita os pontos ja presentes na cena quando os campos novos estiverem vazios.
+        PrepararPontosDaCena();
 
-        if (modeloProduto == null)
+        // Monta as listas de NPCs e produtos a partir do Inspector e do que ja existe na cena.
+        PrepararModelosNpc();
+        PrepararModelosProduto();
+
+        if (scanner == null || spawnNPC == null || despawnNPC == null || spawnProduto == null)
         {
-            GameObject obj = GameObject.Find("Box1");
-            if (obj != null)
-                modeloProduto = obj.GetComponent<Pickup>();
-        }
-
-
-        // Se faltar algo importante, desativa o script
-        if (scanner == null || npcAtual == null || modeloProduto == null)
-        {
-            Debug.LogWarning("Faltando referências!");
+            Debug.LogWarning("SistemaCaixa nao encontrou Scanner, SpawnNPC, DespawnNPC ou SpawnObjects.", this);
             enabled = false;
             return;
         }
 
-        // Guarda posição inicial do NPC (spawn)
-        posicaoSpawnNpc = npcAtual.transform.position;
+        if (modelosNpc.Count == 0 || modelosProduto.Count == 0)
+        {
+            Debug.LogWarning("SistemaCaixa precisa de pelo menos um NPC e um produto configurados.", this);
+            enabled = false;
+            return;
+        }
 
-        // escolhe NPC aleatório
-        int randomIndex = Random.Range(0, npcs.Length);
-
-        // cria o NPC
-        npcAtual = Instantiate(npcs[randomIndex], posicaoSpawnNpc, Quaternion.identity);
-        modeloProduto.gameObject.SetActive(false);
-
-        // Limpa UI
         scanner.LimparTextoInfoProduto();
-
         sistemaPronto = true;
     }
 
     private void Start()
     {
         if (sistemaPronto)
-            StartCoroutine(RotinaClientes()); // inicia loop de clientes
+        {
+            StartCoroutine(RotinaClientes());
+        }
     }
 
     private void Update()
     {
-        if (!sistemaPronto) return;
+        if (!sistemaPronto)
+        {
+            return;
+        }
 
-        // Se o NPC estiver indo ao caixa
         if (estadoAtual == EstadoCliente.IndoAoCaixa)
         {
-            SeguirCaminho(caminhoEntrada, EstadoCliente.AguardandoEscaneamento, AoChegarNoCaixa);
+            // Faz o NPC entrar pela esquerda e parar alinhado ao caixa.
+            MoverNpcPara(CalcularPontoParadaNoCaixa(), EstadoCliente.AguardandoEscaneamento, AoChegarNoCaixa);
         }
-        // Se o NPC estiver indo embora
         else if (estadoAtual == EstadoCliente.IndoEmbora)
         {
-            SeguirCaminho(caminhoSaida, EstadoCliente.AguardandoProximoCliente, AoClienteIrEmbora);
+            // Faz o NPC sair pela direita, como se estivesse indo embora do mercado.
+            MoverNpcPara(despawnNPC.position, EstadoCliente.AguardandoProximoCliente, AoClienteIrEmbora);
         }
-        // Se estiver esperando o troco
         else if (estadoAtual == EstadoCliente.AguardandoTroco)
         {
-            // verifica se apertou tecla e está perto do caixa
-            if (Input.GetKeyDown(teclaEntregarTroco) && JogadorPertoDoScanner())
-            {
-                EntregarTroco();
-            }
+            // Permite digitar o troco diretamente no teclado.
+            ProcessarDigitacaoTroco();
         }
     }
 
-    // Loop infinito de clientes
-    private IEnumerator RotinaClientes()
+    IEnumerator RotinaClientes()
     {
         while (true)
         {
-            yield return new WaitForSeconds(tempoEntreClientes); // espera tempo
+            yield return new WaitForSeconds(tempoEntreClientes);
+            IniciarAtendimento();
 
-            IniciarAtendimento(); // inicia cliente
-
-            // espera terminar atendimento
             while (estadoAtual != EstadoCliente.AguardandoProximoCliente)
             {
                 yield return null;
@@ -163,161 +170,543 @@ public class SistemaCaixa : MonoBehaviour
         }
     }
 
-    // Inicia atendimento de um cliente
-    private void IniciarAtendimento()
+    void IniciarAtendimento()
     {
-        valorPagoAtual = 0f;
-        trocoAtual = 0f;
-        produtoAtual = null;
+        LimparAtendimentoAtual();
 
-        npcAtual.transform.position = posicaoSpawnNpc; // volta para spawn
-        npcAtual.SetActive(true); // ativa NPC
+        int indiceNpcEscolhido = SortearIndiceNpc();
+        GameObject modeloNpcEscolhido = modelosNpc[indiceNpcEscolhido];
+        modeloProdutoAtual = ObterProdutoDoNpc(indiceNpcEscolhido);
 
-        indiceCaminho = 0; // reseta caminho
+        if (modeloNpcEscolhido == null || modeloProdutoAtual == null)
+        {
+            Debug.LogWarning("SistemaCaixa nao conseguiu escolher um NPC ou produto valido.", this);
+            estadoAtual = EstadoCliente.AguardandoProximoCliente;
+            return;
+        }
+
+        totalCompra = 0f;
+        valorPago = 0f;
+        troco = 0f;
+
+        npcAtual = Instantiate(modeloNpcEscolhido, spawnNPC.position, spawnNPC.rotation);
+        npcAtual.name = modeloNpcEscolhido.name;
+        npcAtual.SetActive(true);
+
+        NPCInteraction interacaoClone = npcAtual.GetComponent<NPCInteraction>();
+        if (interacaoClone != null)
+        {
+            // O cliente do caixa nao precisa da interacao manual enquanto estiver no fluxo.
+            interacaoClone.enabled = false;
+        }
 
         estadoAtual = EstadoCliente.IndoAoCaixa;
+        ultimoIndiceNpc = indiceNpcEscolhido;
     }
 
-    // Quando o NPC chega no caixa
-    private void AoChegarNoCaixa()
+    void AoChegarNoCaixa()
     {
-        produtoAtual = SpawnarProdutoDoCliente(); // cria produto
+        produtoAtual = SpawnarProdutoAtual();
 
-        if (produtoAtual != null)
+        if (produtoAtual == null)
         {
-            scanner.MostrarTextoInfoProduto(
-                "Cliente no caixa.\n\n" +
-                produtoAtual.ObterMensagemEscaneamento() +
-                "\n\nEscaneie o produto.",
-                0f
-            );
-        }
-    }
-
-    // Quando o produto é escaneado
-    private void AoProdutoEscaneado(Pickup pickup)
-    {
-        if (estadoAtual != EstadoCliente.AguardandoEscaneamento || pickup != produtoAtual)
+            scanner.MostrarTextoInfoProduto("Cliente chegou, mas nao havia produto configurado.", 2f);
+            estadoAtual = EstadoCliente.IndoEmbora;
             return;
+        }
 
-        // calcula pagamento e troco
-        valorPagoAtual = SortearValorPago(pickup.ObterPrecoProduto());
-        trocoAtual = Mathf.Max(0f, valorPagoAtual - pickup.ObterPrecoProduto());
-
-        estadoAtual = EstadoCliente.AguardandoTroco;
-
-        // mostra info na tela
         scanner.MostrarTextoInfoProduto(
-            pickup.ObterMensagemEscaneamento() +
-            "\n\nCliente pagou: R$ " + valorPagoAtual.ToString("F2") +
-            "\nTroco: R$ " + trocoAtual.ToString("F2") +
-            "\nAperte " + teclaEntregarTroco,
+            "Cliente no caixa.\n\n" +
+            produtoAtual.ObterMensagemEscaneamento() +
+            "\n\nEscaneie o produto para continuar.",
             0f
         );
     }
 
-    // Entrega o troco
-    private void EntregarTroco()
+    void AoProdutoEscaneado(Pickup pickup)
+    {
+        if (estadoAtual != EstadoCliente.AguardandoEscaneamento)
+        {
+            return;
+        }
+
+        if (pickup != produtoAtual)
+        {
+            return;
+        }
+
+        totalCompra = pickup.ObterPrecoProduto();
+        valorPago = SortearValorPago(totalCompra);
+        troco = Mathf.Max(0f, valorPago - totalCompra);
+
+        estadoAtual = EstadoCliente.AguardandoTroco;
+        produtoAtual = null;
+        trocoDigitadoEmCentavos = string.Empty;
+        avisoTrocoAtual = string.Empty;
+        mensagemTrocoAtual =
+            pickup.ObterMensagemEscaneamento() +
+            "\n\nTotal: R$ " + FormatarDinheiro(totalCompra) +
+            "\nPago: R$ " + FormatarDinheiro(valorPago) +
+            "\nDigite o troco e aperte Enter.";
+
+        AtualizarTextoTroco();
+    }
+
+    void EntregarTroco()
     {
         if (goalManager != null)
         {
             goalManager.ClienteAtendido();
-            goalManager.MostrarMensagem("Troco entregue", 3f);
+            goalManager.MostrarMensagem("Troco entregue: R$ " + FormatarDinheiro(troco), 3f);
         }
 
-        scanner.MostrarTextoInfoProduto("Cliente atendido!", 2.5f);
-
-        indiceCaminho = 0; // reseta caminho de saída
+        scanner.MostrarTextoInfoProduto("Troco entregue.\nCliente indo embora.", 2f);
+        trocoDigitadoEmCentavos = string.Empty;
+        mensagemTrocoAtual = string.Empty;
+        avisoTrocoAtual = string.Empty;
         estadoAtual = EstadoCliente.IndoEmbora;
     }
 
-    // Quando o cliente vai embora
-    private void AoClienteIrEmbora()
+    void AoClienteIrEmbora()
     {
-        npcAtual.SetActive(false); // desativa NPC
+        if (npcAtual != null)
+        {
+            Destroy(npcAtual);
+            npcAtual = null;
+        }
+
         estadoAtual = EstadoCliente.AguardandoProximoCliente;
     }
 
-    // 🔥 SISTEMA DE MOVIMENTO POR CAMINHO
-    void SeguirCaminho(Transform[] caminho, EstadoCliente proximoEstado, System.Action aoFinal)
+    void MoverNpcPara(Vector3 destino, EstadoCliente proximoEstado, System.Action aoChegar)
     {
-        if (caminho == null || caminho.Length == 0) return;
-
-        Transform destino = caminho[indiceCaminho]; // ponto atual
-
-        Vector3 posAtual = npcAtual.transform.position;
-
-        // ignora altura (movimento no chão)
-        Vector3 destinoPlano = new Vector3(destino.position.x, posAtual.y, destino.position.z);
-
-        // move o NPC
-        npcAtual.transform.position = Vector3.MoveTowards(
-            posAtual,
-            destinoPlano,
-            velocidadeNpc * Time.deltaTime
-        );
-
-        // gira o NPC para a direção
-        Vector3 direcao = destinoPlano - posAtual;
-        if (direcao.sqrMagnitude > 0.001f)
+        if (npcAtual == null)
         {
-            npcAtual.transform.rotation = Quaternion.LookRotation(direcao.normalized);
+            estadoAtual = EstadoCliente.AguardandoProximoCliente;
+            return;
         }
 
-        // chegou no ponto
-        if (Vector3.Distance(posAtual, destinoPlano) < 0.1f)
-        {
-            indiceCaminho++; // vai pro próximo ponto
+        Vector3 posicaoAtual = npcAtual.transform.position;
+        Vector3 destinoPlano = new Vector3(destino.x, posicaoAtual.y, destino.z);
+        Vector3 direcao = destinoPlano - posicaoAtual;
+        direcao.y = 0f;
 
-            // terminou o caminho
-            if (indiceCaminho >= caminho.Length)
+        if (direcao.sqrMagnitude <= 0.01f)
+        {
+            npcAtual.transform.position = destinoPlano;
+            estadoAtual = proximoEstado;
+            aoChegar?.Invoke();
+            return;
+        }
+
+        npcAtual.transform.position = Vector3.MoveTowards(posicaoAtual, destinoPlano, velocidadeNpc * Time.deltaTime);
+
+        if (direcao.sqrMagnitude > 0.0001f)
+        {
+            // Mantem a rotacao apenas no plano horizontal para evitar giro torto.
+            npcAtual.transform.rotation = Quaternion.LookRotation(direcao.normalized, Vector3.up);
+        }
+    }
+
+    void PrepararPontosDaCena()
+    {
+        if (spawnNPC == null)
+        {
+            spawnNPC = ObterPrimeiroTransformValido(caminhoEntrada);
+        }
+
+        if (despawnNPC == null)
+        {
+            despawnNPC = ObterUltimoTransformValido(caminhoSaida);
+        }
+
+        if (spawnProduto == null)
+        {
+            spawnProduto = ObterPrimeiroTransformValido(pontosSpawn);
+        }
+
+        if (spawnNPC == null)
+        {
+            GameObject spawnNpcObject = GameObject.Find("SpawnNPC");
+            if (spawnNpcObject != null)
             {
-                indiceCaminho = 0;
-                estadoAtual = proximoEstado;
-                aoFinal?.Invoke(); // executa ação final
+                spawnNPC = spawnNpcObject.transform;
+            }
+        }
+
+        if (despawnNPC == null)
+        {
+            GameObject despawnNpcObject = GameObject.Find("DespawnNPC");
+            if (despawnNpcObject != null)
+            {
+                despawnNPC = despawnNpcObject.transform;
+            }
+        }
+
+        if (spawnProduto == null)
+        {
+            GameObject spawnProdutoObject = GameObject.Find("SpawnObjects");
+            if (spawnProdutoObject != null)
+            {
+                spawnProduto = spawnProdutoObject.transform;
             }
         }
     }
 
-    // Cria produto na frente do caixa
-    private Pickup SpawnarProdutoDoCliente()
+    void PrepararModelosNpc()
     {
-        // verifica se o ponto de spawn foi definido
-        if (spawnProduto == null)
+        modelosNpc.Clear();
+
+        AdicionarModeloNpc(npcCliente);
+
+        if (npcsExtras != null)
         {
-            Debug.LogError("SpawnProduto não definido!");
+            for (int i = 0; i < npcsExtras.Length; i++)
+            {
+                AdicionarModeloNpc(npcsExtras[i]);
+            }
+        }
+
+        if (modelosNpc.Count == 0)
+        {
+            GameObject[] objetosDaCena = Resources.FindObjectsOfTypeAll<GameObject>();
+            for (int i = 0; i < objetosDaCena.Length; i++)
+            {
+                GameObject objeto = objetosDaCena[i];
+                if (!objeto.scene.IsValid())
+                {
+                    continue;
+                }
+
+                if (!objeto.name.StartsWith("NPC"))
+                {
+                    continue;
+                }
+
+                AdicionarModeloNpc(objeto);
+            }
+        }
+
+        modelosNpc.Sort((a, b) => string.Compare(a.name, b.name));
+    }
+
+    void PrepararModelosProduto()
+    {
+        modelosProduto.Clear();
+
+        AdicionarModeloProduto(modeloProduto);
+
+        if (produtosExtras != null)
+        {
+            for (int i = 0; i < produtosExtras.Length; i++)
+            {
+                AdicionarModeloProduto(produtosExtras[i]);
+            }
+        }
+
+        if (modelosProduto.Count == 0)
+        {
+            Pickup[] pickupsDaCena = Resources.FindObjectsOfTypeAll<Pickup>();
+            for (int i = 0; i < pickupsDaCena.Length; i++)
+            {
+                Pickup pickupDaCena = pickupsDaCena[i];
+                if (!pickupDaCena.gameObject.scene.IsValid())
+                {
+                    continue;
+                }
+
+                AdicionarModeloProduto(pickupDaCena);
+            }
+        }
+
+        modelosProduto.Sort((a, b) => string.Compare(a.name, b.name));
+    }
+
+    void AdicionarModeloNpc(GameObject modelo)
+    {
+        if (modelo == null || modelosNpc.Contains(modelo))
+        {
+            return;
+        }
+
+        NPCInteraction interacao = modelo.GetComponent<NPCInteraction>();
+        if (interacao != null)
+        {
+            // Desliga a interacao manual no modelo para evitar conflito com o cliente do caixa.
+            interacao.enabled = false;
+        }
+
+        modelo.SetActive(false);
+        modelosNpc.Add(modelo);
+    }
+
+    void AdicionarModeloProduto(Pickup modelo)
+    {
+        if (modelo == null || modelosProduto.Contains(modelo))
+        {
+            return;
+        }
+
+        modelo.gameObject.SetActive(false);
+        modelosProduto.Add(modelo);
+    }
+
+    Pickup ObterProdutoDoNpc(int indiceNpc)
+    {
+        if (modelosProduto.Count == 0)
+        {
             return null;
         }
 
-        // cria o produto na posição do spawn
-        Pickup novoProduto = Instantiate(
-            modeloProduto,
-            spawnProduto.position,
-            spawnProduto.rotation
-        );
+        // Faz o pareamento por ordem para que NPC1 puxe Box1, NPC2 puxe Box2 e assim por diante.
+        int indiceProduto = indiceNpc % modelosProduto.Count;
+        return modelosProduto[indiceProduto];
+    }
 
-        // garante que o objeto está ativo
+    Pickup SpawnarProdutoAtual()
+    {
+        if (modeloProdutoAtual == null || spawnProduto == null)
+        {
+            return null;
+        }
+
+        Pickup novoProduto = Instantiate(modeloProdutoAtual, spawnProduto.position, spawnProduto.rotation);
+        novoProduto.name = modeloProdutoAtual.name;
         novoProduto.gameObject.SetActive(true);
-
         return novoProduto;
     }
 
-    // Verifica se jogador está perto do caixa
-    private bool JogadorPertoDoScanner()
+    int SortearIndiceNpc()
     {
-        if (jogador == null) return true;
+        if (modelosNpc.Count <= 1)
+        {
+            return 0;
+        }
 
-        return Vector3.Distance(jogador.position, scanner.transform.position) <= distanciaEntregaTroco;
+        int indiceSorteado = Random.Range(0, modelosNpc.Count);
+
+        if (!evitarRepetirNpcEmSequencia)
+        {
+            return indiceSorteado;
+        }
+
+        int tentativas = 0;
+        while (indiceSorteado == ultimoIndiceNpc && tentativas < 10)
+        {
+            indiceSorteado = Random.Range(0, modelosNpc.Count);
+            tentativas++;
+        }
+
+        return indiceSorteado;
     }
 
-    // Sorteia valor pago maior que o preço
-    private float SortearValorPago(float preco)
+    void ProcessarDigitacaoTroco()
     {
-        foreach (float v in valoresPagamento)
+        bool houveMudanca = false;
+
+        foreach (char caractere in Input.inputString)
         {
-            if (v > preco)
-                return v;
+            if (char.IsDigit(caractere))
+            {
+                if (trocoDigitadoEmCentavos.Length < maximoDigitosTroco)
+                {
+                    trocoDigitadoEmCentavos += caractere;
+                    avisoTrocoAtual = string.Empty;
+                    houveMudanca = true;
+                }
+            }
+            else if (caractere == '\b')
+            {
+                if (trocoDigitadoEmCentavos.Length > 0)
+                {
+                    trocoDigitadoEmCentavos = trocoDigitadoEmCentavos.Substring(0, trocoDigitadoEmCentavos.Length - 1);
+                    avisoTrocoAtual = string.Empty;
+                    houveMudanca = true;
+                }
+            }
+            else if (caractere == '\r' || caractere == '\n')
+            {
+                ConfirmarTrocoDigitado();
+                return;
+            }
         }
-        return preco + 10f;
+
+        if (houveMudanca)
+        {
+            AtualizarTextoTroco();
+        }
+    }
+
+    void ConfirmarTrocoDigitado()
+    {
+        if (!JogadorPertoDoScanner())
+        {
+            avisoTrocoAtual = "Chegue mais perto do caixa para confirmar o troco.";
+            AtualizarTextoTroco();
+            return;
+        }
+
+        float valorDigitado = ObterValorTrocoDigitado();
+        if (Mathf.Abs(valorDigitado - troco) <= 0.009f)
+        {
+            EntregarTroco();
+            return;
+        }
+
+        trocoDigitadoEmCentavos = string.Empty;
+        avisoTrocoAtual = "Troco incorreto. Digite novamente.";
+        AtualizarTextoTroco();
+    }
+
+    void AtualizarTextoTroco()
+    {
+        if (scanner == null)
+        {
+            return;
+        }
+
+        string textoTroco =
+            mensagemTrocoAtual +
+            "\nTroco digitado: R$ " + FormatarTrocoDigitado();
+
+        if (!string.IsNullOrWhiteSpace(avisoTrocoAtual))
+        {
+            textoTroco += "\n" + avisoTrocoAtual;
+        }
+
+        scanner.MostrarTextoInfoProduto(textoTroco, 0f);
+    }
+
+    Vector3 CalcularPontoParadaNoCaixa()
+    {
+        if (scanner == null || spawnNPC == null || despawnNPC == null)
+        {
+            return Vector3.zero;
+        }
+
+        Vector3 pontoParada = scanner.transform.position;
+        Vector3 eixoEntradaSaida = despawnNPC.position - spawnNPC.position;
+        eixoEntradaSaida.y = 0f;
+
+        // Se o fluxo principal for horizontal, mantem o NPC andando da esquerda para a direita.
+        if (Mathf.Abs(eixoEntradaSaida.x) >= Mathf.Abs(eixoEntradaSaida.z))
+        {
+            pontoParada.z = spawnNPC.position.z;
+            pontoParada.y = spawnNPC.position.y;
+        }
+        else
+        {
+            pontoParada.x = spawnNPC.position.x;
+            pontoParada.y = spawnNPC.position.y;
+        }
+
+        return pontoParada;
+    }
+
+    Transform ObterPrimeiroTransformValido(Transform[] pontos)
+    {
+        if (pontos == null || pontos.Length == 0)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < pontos.Length; i++)
+        {
+            if (pontos[i] != null)
+            {
+                return pontos[i];
+            }
+        }
+
+        return null;
+    }
+
+    Transform ObterUltimoTransformValido(Transform[] pontos)
+    {
+        if (pontos == null || pontos.Length == 0)
+        {
+            return null;
+        }
+
+        for (int i = pontos.Length - 1; i >= 0; i--)
+        {
+            if (pontos[i] != null)
+            {
+                return pontos[i];
+            }
+        }
+
+        return null;
+    }
+
+    bool JogadorPertoDoScanner()
+    {
+        if (jogador == null || scanner == null)
+        {
+            return true;
+        }
+
+        Vector3 posicaoJogador = jogador.position;
+        Vector3 posicaoScanner = scanner.transform.position;
+        posicaoJogador.y = 0f;
+        posicaoScanner.y = 0f;
+
+        return Vector3.Distance(posicaoJogador, posicaoScanner) <= distanciaEntregaTroco;
+    }
+
+    float SortearValorPago(float preco)
+    {
+        List<float> valoresValidos = new List<float>();
+
+        for (int i = 0; i < valoresPagamento.Length; i++)
+        {
+            if (valoresPagamento[i] >= preco)
+            {
+                valoresValidos.Add(valoresPagamento[i]);
+            }
+        }
+
+        if (valoresValidos.Count == 0)
+        {
+            return preco + 10f;
+        }
+
+        return valoresValidos[Random.Range(0, valoresValidos.Count)];
+    }
+
+    string FormatarDinheiro(float valor)
+    {
+        return valor.ToString("F2").Replace(".", ",");
+    }
+
+    float ObterValorTrocoDigitado()
+    {
+        long centavos = 0;
+        long.TryParse(trocoDigitadoEmCentavos, out centavos);
+        return centavos / 100f;
+    }
+
+    string FormatarTrocoDigitado()
+    {
+        return FormatarDinheiro(ObterValorTrocoDigitado());
+    }
+
+    void LimparAtendimentoAtual()
+    {
+        if (npcAtual != null)
+        {
+            Destroy(npcAtual);
+            npcAtual = null;
+        }
+
+        if (produtoAtual != null)
+        {
+            Destroy(produtoAtual.gameObject);
+            produtoAtual = null;
+        }
+
+        trocoDigitadoEmCentavos = string.Empty;
+        mensagemTrocoAtual = string.Empty;
+        avisoTrocoAtual = string.Empty;
     }
 }
