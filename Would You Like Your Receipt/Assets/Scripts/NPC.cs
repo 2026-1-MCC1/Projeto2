@@ -1,15 +1,15 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class NPCInteraction : MonoBehaviour
 {
-    // Distância máxima para o jogador interagir com o NPC
+    // DistÃ¢ncia mÃ¡xima para o jogador interagir com o NPC
     public float interactionDistance = 3f;
 
-    // Referência ao jogador (Transform = posição dele no mundo)
+    // ReferÃªncia ao jogador (Transform = posiÃ§Ã£o dele no mundo)
     public Transform player;
 
     // Mensagem que o NPC vai falar
-    public string message = "Olá, pode me ajudar?";
+    public string message = "OlÃ¡, pode me ajudar?";
     public float messageDuration = 2f;
 
     // Guarda a referencia para a UI que mostra as mensagens na tela.
@@ -42,10 +42,10 @@ public class NPCInteraction : MonoBehaviour
             return;
         }
 
-        // Calcula a distância entre o NPC e o jogador
+        // Calcula a distÃ¢ncia entre o NPC e o jogador
         float distance = Vector3.Distance(transform.position, player.position);
 
-        // Verifica se o jogador está perto o suficiente
+        // Verifica se o jogador estÃ¡ perto o suficiente
         if (distance <= interactionDistance)
         {
             // Verifica se o jogador apertou a tecla E

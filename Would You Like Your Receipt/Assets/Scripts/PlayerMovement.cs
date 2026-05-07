@@ -1,10 +1,13 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class PlayerMovement : MonoBehaviour
 {
+    // Velocidade de deslocamento do jogador.
     public float speed = 3f;
+    // Define se o personagem pode andar no momento.
     private bool movable = true;
-    public CameraConsole console; //Permite selecionar GameObject do script no inspetor da Unity para referenciar depois.
+    // Permite selecionar o console de cameras no Inspector.
+    public CameraConsole console;
 
     private void Awake()
     {
@@ -22,15 +25,19 @@ public class PlayerMovement : MonoBehaviour
 
     void Update()
     {
+        // Pausa ou libera o movimento quando o console de cameras abre/fecha.
         if (console != null && Input.GetKeyDown(console.OpenCameras))
         {
-            movable = !movable; //Alterna entre habilitar e desabilitar movimento do personagem (Para quando as câmeras estiverem abertas)
+            movable = !movable;
         }
-        if(movable == true) //Apenas permite movimento se a variável estiver verdadeira.
-        {
-            float moveX = Input.GetAxis("Horizontal"); // A/D
-            float moveZ = Input.GetAxis("Vertical");   // W/S
 
+        // Move o jogador apenas quando a variavel permite.
+        if(movable == true)
+        {
+            float moveX = Input.GetAxis("Horizontal");
+            float moveZ = Input.GetAxis("Vertical");
+
+            // Usa o eixo local do jogador para andar conforme sua rotacao atual.
             Vector3 movement = new Vector3(moveX, 0f, moveZ);
 
             transform.Translate(movement * speed * Time.deltaTime);

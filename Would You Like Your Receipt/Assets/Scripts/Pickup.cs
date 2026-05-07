@@ -1,12 +1,16 @@
-using System.Globalization;
+﻿using System.Globalization;
 using UnityEngine;
 
 public class Pickup : MonoBehaviour
 {
+    // Controla se o produto esta preso ao ponto de segurar do jogador.
     bool estaSegurando = false;
+    // Impede que o mesmo produto conte duas vezes no scanner.
     bool foiEscaneado = false;
 
+    // Forca aplicada quando o jogador arremessa o produto.
     [SerializeField] float throwForce = 150f;
+    // Distancia maxima para pegar ou continuar segurando o produto.
     [SerializeField] float maxDistance = 3f;
     // Nome exibido na tela quando o produto for escaneado.
     [SerializeField] string nomeProduto = "";
@@ -24,12 +28,16 @@ public class Pickup : MonoBehaviour
 
     public CameraConsole console; // Permite selecionar o console de cameras no Inspector.
 
+    // Ponto temporario onde o produto fica como filho enquanto esta sendo carregado.
     TempParent tempParent;
+    // Rigidbody usado para ativar/desativar gravidade e zerar movimentos.
     Rigidbody rb;
+    // Guarda a posicao atual antes de soltar o objeto.
     Vector3 objPosition;
 
     void Start()
     {
+        // Pega as referencias necessarias para o comportamento de carregar item.
         rb = GetComponent<Rigidbody>();
         tempParent = TempParent.Instance;
 
@@ -47,6 +55,7 @@ public class Pickup : MonoBehaviour
 
     void Update()
     {
+        // Mantem as regras de segurar enquanto o item esta na mao do jogador.
         if (estaSegurando)
         {
             Segurar();
@@ -158,16 +167,19 @@ public class Pickup : MonoBehaviour
 
     public string ObterNomeProduto()
     {
+        // Usa o nome configurado no Inspector ou o nome do GameObject como fallback.
         return string.IsNullOrWhiteSpace(nomeProduto) ? gameObject.name : nomeProduto;
     }
 
     public float ObterPrecoProduto()
     {
+        // Entrega o preco para o sistema do caixa calcular o troco.
         return precoProduto;
     }
 
     public float ObterDuracaoMensagemEscaneamento()
     {
+        // Define por quanto tempo a mensagem do produto fica visivel.
         return duracaoMensagemEscaneamento;
     }
 

@@ -1,36 +1,49 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 
 public class CameraConsole : MonoBehaviour
 {
+    // Lista de cameras de seguranca que podem ser vistas pelo console.
     public GameObject[] Cameras;
+    // Indice da camera atualmente selecionada.
     public int CurrentCam;
-    public KeyCode OpenCameras = KeyCode.Space; // Ao apertar espaço, troca de câmeras
+    // Tecla usada para abrir ou fechar o console de cameras.
+    public KeyCode OpenCameras = KeyCode.Space;
+    // Indica se o jogador esta olhando pelas cameras do console.
     public bool CamerasOpen;
+    // Camera principal do jogador.
     public GameObject MainCamera;
+    // Contador usado para impedir troca rapida demais entre cameras.
     public float CoolDownTimer;
-    public float CoolDownTime = 0.5f; // Cooldown da troca de câmeras
+    // Tempo minimo entre uma troca de camera e outra.
+    public float CoolDownTime = 0.5f;
 
     void Start()
     {
-        for (int i = 0; i < Cameras.Length; i++) //Faz com que as câmeras sejam desativadas quando o jogo inicia. Se começarem desativadas, não podem ser ativadas depois.
+        // Desativa todas as cameras de seguranca ao iniciar a cena.
+        for (int i = 0; i < Cameras.Length; i++)
         {
             Cameras[i].SetActive(false);
         }
-        MainCamera.SetActive(true); //Garante que a câmera principal (Visão do personagem) inicia ativa.
+
+        // Garante que a visao normal do jogador comece ativa.
+        MainCamera.SetActive(true);
     }
 
     
     void Update()
     {
-        if (Input.GetKeyDown(OpenCameras)) //Permite seleção de tecla para abrir e fechar câmera.
+        // Abre ou fecha a tela de cameras.
+        if (Input.GetKeyDown(OpenCameras))
         {
             CamerasOpen = !CamerasOpen;
             ShowCamera();
         }
 
-        if (CoolDownTimer <= 0) //Faz com que as câmeras apenas troquem se o cooldown for zero ou menor.
+        // Permite trocar de camera somente quando o cooldown terminou.
+        if (CoolDownTimer <= 0)
         {
-            if (Input.GetAxis("Horizontal") > 0) //Vai para a próxima câmera na lista.
+            // Vai para a proxima camera da lista.
+            if (Input.GetAxis("Horizontal") > 0)
             {
                 Cameras[CurrentCam].SetActive(false);
                 CurrentCam = CurrentCam + 1;
@@ -41,7 +54,8 @@ public class CameraConsole : MonoBehaviour
                 GoToCamera(CurrentCam);
                 CoolDownTimer = CoolDownTime;
             }
-            else if (Input.GetAxis("Horizontal") < 0) //Vai para a câmera anterior na lista.
+            // Vai para a camera anterior da lista.
+            else if (Input.GetAxis("Horizontal") < 0)
             {
                 Cameras[CurrentCam].SetActive(false);
                 CurrentCam = CurrentCam - 1;
@@ -55,19 +69,22 @@ public class CameraConsole : MonoBehaviour
         }
         else
         {
-            CoolDownTimer -= Time.deltaTime; //Diminui o cooldown de troca de câmeras.
+            // Reduz o tempo restante ate a proxima troca ser liberada.
+            CoolDownTimer -= Time.deltaTime;
         }
     }
     private void ShowCamera()
     {
-        if (CamerasOpen) //Desliga a câmera principal (Visão do personagem) ao abrir a tela de câmeras.
+        // Liga o console de cameras e libera o cursor para interacao.
+        if (CamerasOpen)
         {
             Cameras[CurrentCam].SetActive(true);
             MainCamera.SetActive(false);
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
-        else //Ativa a câmera principal ao fechar a tela de câmeras.
+        // Volta para a camera principal do jogador.
+        else
         {
             Cameras[CurrentCam].SetActive(false);
             MainCamera.SetActive(true);
@@ -75,10 +92,13 @@ public class CameraConsole : MonoBehaviour
             Cursor.visible = false;
         }
     }
-    public void GoToCamera(int Progression) //Define progressão para movimentação de câmeras quando usando A e D.
+
+    public void GoToCamera(int Progression)
     {
+        // Desliga a camera atual antes de ativar a nova escolhida.
         Cameras[CurrentCam].SetActive(false);
         CurrentCam = Progression;
         ShowCamera();
     }
 }
+

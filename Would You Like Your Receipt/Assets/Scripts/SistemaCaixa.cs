@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -39,12 +39,17 @@ public class SistemaCaixa : MonoBehaviour
     [SerializeField] float velocidadeNpc = 2.2f;
     [SerializeField] float tempoEntreClientes = 4f;
     [SerializeField] float distanciaEntregaTroco = 2.5f;
+    [SerializeField] float distanciaChegadaWaypoint = 0.08f;
+    [SerializeField] bool sortearCaminhoEntrada = true;
+    [SerializeField] bool sortearCaminhoSaida = true;
     [SerializeField] float[] valoresPagamento = { 20f, 50f, 100f };
     [SerializeField] bool evitarRepetirNpcEmSequencia = true;
     [SerializeField] int maximoDigitosTroco = 6;
 
     readonly List<GameObject> modelosNpc = new List<GameObject>();
     readonly List<Pickup> modelosProduto = new List<Pickup>();
+    readonly List<Transform> caminhoEntradaAtual = new List<Transform>();
+    readonly List<Transform> caminhoSaidaAtual = new List<Transform>();
 
     EstadoCliente estadoAtual = EstadoCliente.AguardandoProximoCliente;
 
@@ -53,6 +58,8 @@ public class SistemaCaixa : MonoBehaviour
     Pickup modeloProdutoAtual;
 
     int ultimoIndiceNpc = -1;
+    int indiceWaypointEntradaAtual;
+    int indiceWaypointSaidaAtual;
 
     float totalCompra;
     float valorPago;
@@ -141,13 +148,25 @@ public class SistemaCaixa : MonoBehaviour
 
         if (estadoAtual == EstadoCliente.IndoAoCaixa)
         {
-            // Faz o NPC entrar pela esquerda e parar alinhado ao caixa.
-            MoverNpcPara(CalcularPontoParadaNoCaixa(), EstadoCliente.AguardandoEscaneamento, AoChegarNoCaixa);
+            // Faz o NPC seguir pelos Empty Objects da entrada antes de parar no caixa.
+            MoverNpcPeloCaminho(
+                caminhoEntradaAtual,
+                ref indiceWaypointEntradaAtual,
+                CalcularPontoParadaNoCaixa(),
+                EstadoCliente.AguardandoEscaneamento,
+                AoChegarNoCaixa
+            );
         }
         else if (estadoAtual == EstadoCliente.IndoEmbora)
         {
-            // Faz o NPC sair pela direita, como se estivesse indo embora do mercado.
-            MoverNpcPara(despawnNPC.position, EstadoCliente.AguardandoProximoCliente, AoClienteIrEmbora);
+            // Faz o NPC seguir pelos Empty Objects da saida antes de sumir da cena.
+            MoverNpcPeloCaminho(
+                caminhoSaidaAtual,
+                ref indiceWaypointSaidaAtual,
+                despawnNPC.position,
+                EstadoCliente.AguardandoProximoCliente,
+                AoClienteIrEmbora
+            );
         }
         else if (estadoAtual == EstadoCliente.AguardandoTroco)
         {
@@ -193,6 +212,14 @@ public class SistemaCaixa : MonoBehaviour
         npcAtual.name = modeloNpcEscolhido.name;
         npcAtual.SetActive(true);
 
+        // Sorteia os waypoints deste atendimento para cada cliente fazer um caminho diferente.
+        PrepararCaminhoAtual(caminhoEntrada, caminhoEntradaAtual, sortearCaminhoEntrada);
+        PrepararCaminhoAtual(caminhoSaida, caminhoSaidaAtual, sortearCaminhoSaida);
+        RemoverPontoDoCaminho(caminhoEntradaAtual, spawnNPC);
+        RemoverPontoDoCaminho(caminhoSaidaAtual, despawnNPC);
+        indiceWaypointEntradaAtual = 0;
+        indiceWaypointSaidaAtual = 0;
+
         NPCInteraction interacaoClone = npcAtual.GetComponent<NPCInteraction>();
         if (interacaoClone != null)
         {
@@ -211,6 +238,7 @@ public class SistemaCaixa : MonoBehaviour
         if (produtoAtual == null)
         {
             scanner.MostrarTextoInfoProduto("Cliente chegou, mas nao havia produto configurado.", 2f);
+            indiceWaypointSaidaAtual = 0;
             estadoAtual = EstadoCliente.IndoEmbora;
             return;
         }
@@ -264,6 +292,7 @@ public class SistemaCaixa : MonoBehaviour
         trocoDigitadoEmCentavos = string.Empty;
         mensagemTrocoAtual = string.Empty;
         avisoTrocoAtual = string.Empty;
+        indiceWaypointSaidaAtual = 0;
         estadoAtual = EstadoCliente.IndoEmbora;
     }
 
@@ -278,7 +307,7 @@ public class SistemaCaixa : MonoBehaviour
         estadoAtual = EstadoCliente.AguardandoProximoCliente;
     }
 
-    void MoverNpcPara(Vector3 destino, EstadoCliente proximoEstado, System.Action aoChegar)
+    void MoverNpcPeloCaminho(List<Transform> caminhoAtual, ref int indiceWaypointAtual, Vector3 destinoFinal, EstadoCliente proximoEstado, System.Action aoChegar)
     {
         if (npcAtual == null)
         {
@@ -286,17 +315,42 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
+        // Ignora referencias vazias para nao travar o NPC se algum Empty Object for removido.
+        while (indiceWaypointAtual < caminhoAtual.Count && caminhoAtual[indiceWaypointAtual] == null)
+        {
+            indiceWaypointAtual++;
+        }
+
+        bool seguindoWaypoint = indiceWaypointAtual < caminhoAtual.Count;
+        Vector3 destino = seguindoWaypoint ? caminhoAtual[indiceWaypointAtual].position : destinoFinal;
+
+        if (!MoverNpcAte(destino))
+        {
+            return;
+        }
+
+        if (seguindoWaypoint)
+        {
+            // Avanca para o proximo Empty Object sorteado antes de ir para o destino final.
+            indiceWaypointAtual++;
+            return;
+        }
+
+        estadoAtual = proximoEstado;
+        aoChegar?.Invoke();
+    }
+
+    bool MoverNpcAte(Vector3 destino)
+    {
         Vector3 posicaoAtual = npcAtual.transform.position;
         Vector3 destinoPlano = new Vector3(destino.x, posicaoAtual.y, destino.z);
         Vector3 direcao = destinoPlano - posicaoAtual;
         direcao.y = 0f;
 
-        if (direcao.sqrMagnitude <= 0.01f)
+        if (direcao.sqrMagnitude <= distanciaChegadaWaypoint * distanciaChegadaWaypoint)
         {
             npcAtual.transform.position = destinoPlano;
-            estadoAtual = proximoEstado;
-            aoChegar?.Invoke();
-            return;
+            return true;
         }
 
         npcAtual.transform.position = Vector3.MoveTowards(posicaoAtual, destinoPlano, velocidadeNpc * Time.deltaTime);
@@ -306,6 +360,8 @@ public class SistemaCaixa : MonoBehaviour
             // Mantem a rotacao apenas no plano horizontal para evitar giro torto.
             npcAtual.transform.rotation = Quaternion.LookRotation(direcao.normalized, Vector3.up);
         }
+
+        return false;
     }
 
     void PrepararPontosDaCena()
@@ -349,6 +405,60 @@ public class SistemaCaixa : MonoBehaviour
             if (spawnProdutoObject != null)
             {
                 spawnProduto = spawnProdutoObject.transform;
+            }
+        }
+    }
+
+    void PrepararCaminhoAtual(Transform[] caminhoBase, List<Transform> caminhoAtual, bool sortearPontos)
+    {
+        caminhoAtual.Clear();
+
+        if (caminhoBase == null || caminhoBase.Length == 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < caminhoBase.Length; i++)
+        {
+            if (caminhoBase[i] != null)
+            {
+                // Copia somente os Empty Objects validos para a rota deste cliente.
+                caminhoAtual.Add(caminhoBase[i]);
+            }
+        }
+
+        if (sortearPontos)
+        {
+            // Embaralha os pontos para cada NPC ter uma variacao de caminho.
+            EmbaralharCaminho(caminhoAtual);
+        }
+    }
+
+    void EmbaralharCaminho(List<Transform> caminho)
+    {
+        for (int i = caminho.Count - 1; i > 0; i--)
+        {
+            // Fisher-Yates: troca cada ponto com outro indice aleatorio da lista.
+            int indiceSorteado = Random.Range(0, i + 1);
+            Transform pontoTemporario = caminho[i];
+            caminho[i] = caminho[indiceSorteado];
+            caminho[indiceSorteado] = pontoTemporario;
+        }
+    }
+
+    void RemoverPontoDoCaminho(List<Transform> caminho, Transform pontoIgnorado)
+    {
+        if (pontoIgnorado == null)
+        {
+            return;
+        }
+
+        for (int i = caminho.Count - 1; i >= 0; i--)
+        {
+            if (caminho[i] == pontoIgnorado)
+            {
+                // Evita sortear o ponto usado apenas como spawn ou despawn.
+                caminho.RemoveAt(i);
             }
         }
     }

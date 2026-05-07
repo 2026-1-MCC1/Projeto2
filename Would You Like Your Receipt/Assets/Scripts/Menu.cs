@@ -1,16 +1,18 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.SceneManagement;
 
 public class Menu : MonoBehaviour
 {
     public void PlayGame()
     {
-        SceneManager.LoadScene("Game"); // nome da sua cena do jogo
+        // Carrega a cena principal do jogo.
+        SceneManager.LoadScene("Game");
     }
 
     public void QuitGame()
     {
-        Debug.Log("Saiu do jogo"); // aparece no editor
-        Application.Quit(); // funciona no build
+        // Mostra feedback no Editor e fecha o jogo no build.
+        Debug.Log("Saiu do jogo");
+        Application.Quit();
     }
 }
