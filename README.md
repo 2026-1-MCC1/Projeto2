@@ -12,7 +12,7 @@ Vide tutoriais do PI.
 
 # Would you like your Receipt?
 ## O Efêmero Mercado Carmesim
-## Integrantes: <a href="https://www.linkedin.com/in/guilherme-montes-640a37367">Guilherme da Silva Montes</a>, <a href="https://www.linkedin.com/in/kris-janjiulio-6152363b7/">Kris Pascali Janjiulio</a>, <a href="https://www.linkedin.com/in/pietra-ruiz-57b7643b3?/">Pietra Augusto Farias Ruiz</a>, <a href="https://www.linkedin.com/in/gabriel-cuentas-3a32433b7?/">Gabriel Fernando Cuentas Cruz</a>
+## Integrantes: <a href="https://www.linkedin.com/in/guilherme-montes-640a37367">Guilherme da Silva Montes</a>, <a href="https://www.linkedin.com/in/kris-janjiulio-6152363b7/">Kris Pascali Janjiulio</a>, <a href="https://www.linkedin.com/in/pietra-ruiz-57b7643b3?/">Pietra Augusto Farias Ruiz</a>
 
 ## Professores Orientadores: <a href="https://www.linkedin.com/in/victorbarq/">Victor Bruno Alexander Rosetti de Quiroz</a>, <a href="https://www.linkedin.com/in//">Adriando Felix Valente</a>, <a href="https://www.linkedin.com/in//">Eduardo Savino Gomes</a>, <a href="https://www.linkedin.com/in//">Luis Fernando dos Santos Pires</a>
 
@@ -83,7 +83,7 @@ Coloque código do prompt de comnando se for necessário
 ```
 
 ## 📋 Licença/License
-<a href="https://github.com/2026-1-MCC1/Projeto2">Would You Like Your Receipt?</a> © 2026 by <a href="https://github.com/M0ntesP, https://github.com/Krentell, https://github.com/Pihetra013, https://github.com/gabrielfernandoc13-lgtm">Guilherme da Silva Montes, Kris Pascali Janjiulio, Pietra Augusto Farias Ruiz, Gabriel Fernando Cuentas Cruz</a> is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a><img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;">
+<a href="https://github.com/2026-1-MCC1/Projeto2">Would You Like Your Receipt?</a> © 2026 by <a href="https://github.com/M0ntesP, https://github.com/Krentell, https://github.com/Pihetra013>Guilherme da Silva Montes, Kris Pascali Janjiulio, Pietra Augusto Farias Ruiz </a> is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a><img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;">
 
 ## 🎓 Referências
 
