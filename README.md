@@ -1,9 +1,3 @@
-```sh
-Utilize o site <https://www.toptal.com/developers/gitignore> para gerar seu arquivo gitignore e apague este campo.
-
-Vide tutoriais do PI.
-```
-
 # FECAP - Fundação de Comércio Álvares Penteado
 
 <p align="center">
@@ -14,7 +8,7 @@ Vide tutoriais do PI.
 ## O Efêmero Mercado Carmesim
 ## Integrantes: <a href="https://www.linkedin.com/in/guilherme-montes-640a37367">Guilherme da Silva Montes</a>, <a href="https://www.linkedin.com/in/kris-janjiulio-6152363b7/">Kris Pascali Janjiulio</a>, <a href="https://www.linkedin.com/in/pietra-ruiz-57b7643b3?/">Pietra Augusto Farias Ruiz</a>
 
-## Professores Orientadores: <a href="https://www.linkedin.com/in/victorbarq/">Victor Bruno Alexander Rosetti de Quiroz</a>, <a href="https://www.linkedin.com/in//">Adriando Felix Valente</a>, <a href="https://www.linkedin.com/in//">Eduardo Savino Gomes</a>, <a href="https://www.linkedin.com/in//">Luis Fernando dos Santos Pires</a>
+## Professores Orientadores: <a href="https://www.linkedin.com/in/victorbarq/">Victor Bruno Alexander Rosetti de Quiroz</a>, <a href="https://www.linkedin.com/in//">Adriando Felix Valente</a>, <a href="https://www.linkedin.com/in//">Renata Muniz de Nascimento</a>, <a href="https://www.linkedin.com/in//">Eduardo Savino Gomes</a>, <a href="https://www.linkedin.com/in//">Luis Fernando dos Santos Pires</a>
 
 ## Descrição
 
@@ -70,11 +64,9 @@ Coloque código do prompt de comnando se for necessário
 
 ## 💻 Configuração para Desenvolvimento
 
-Descreva como instalar todas as dependências para desenvolvimento e como rodar um test-suite automatizado de algum tipo. Se necessário, faça isso para múltiplas plataformas.
-
 Para abrir este projeto você necessita das seguintes ferramentas:
 
--<a href="https://godotengine.org/download">GODOT</a>
+-<a href="https://cloud.unity.com/home/organizations/4674164811560/onboarding/post-download?locale=en&code=yKOMTL5ElXYf24kPiqDfhg004f&locale=en&session_state=28203af880f19bd325bbb66b014e918b0681818f7bd4dbcd8948069ede3b42f2.9v75EQGaalRbthPlSjs1vQ001f">Unity</a>
 
 ```sh
 make install
@@ -83,7 +75,7 @@ Coloque código do prompt de comnando se for necessário
 ```
 
 ## 📋 Licença/License
-<a href="https://github.com/2026-1-MCC1/Projeto2">Would You Like Your Receipt?</a> © 2026 by <a href="https://github.com/M0ntesP, https://github.com/Krentell, https://github.com/Pihetra013>Guilherme da Silva Montes, Kris Pascali Janjiulio, Pietra Augusto Farias Ruiz </a> is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a><img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;">
+<a href="https://github.com/2026-1-MCC1/Projeto2">Would You Like Your Receipt?</a> © 2026 by <a href="https://github.com/M0ntesP, https://github.com/Krentell, https://github.com/Pihetra013>Guilherme da Silva Montes, Kris Pascali Janjiulio, Pietra Augusto Farias Ruiz, FECAP </a> is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a><img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;">
 
 ## 🎓 Referências
 
