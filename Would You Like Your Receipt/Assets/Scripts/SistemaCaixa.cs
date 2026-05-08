@@ -23,6 +23,7 @@ public class SistemaCaixa : MonoBehaviour
     enum EstadoCliente
     {
         AguardandoProximoCliente,
+        IndoAoProduto,
         IndoAoCaixa,
         AguardandoEscaneamento,
         AguardandoTroco,
@@ -51,12 +52,19 @@ public class SistemaCaixa : MonoBehaviour
     [SerializeField] Transform[] pontosSpawn;
     [SerializeField] Transform spawnNPC;
     [SerializeField] Transform despawnNPC;
+    [SerializeField] Transform interactables;
+    [SerializeField] Transform storeModel;
 
     // Ajustes de comportamento.
     [SerializeField] float velocidadeNpc = 2.2f;
     [SerializeField] float tempoEntreClientes = 4f;
     [SerializeField] float distanciaEntregaTroco = 2.5f;
     [SerializeField] float distanciaChegadaWaypoint = 0.08f;
+    [SerializeField] float distanciaChegadaProduto = 0.45f;
+    [SerializeField] bool pegarProdutosDaPrateleira = true;
+    [SerializeField] float raioAgenteNpc = 0.35f;
+    [SerializeField] float alturaAgenteNpc = 1.8f;
+    [SerializeField] float distanciaAproximacaoProduto = 1.1f;
     [SerializeField] bool sortearCaminhoEntrada = true;
     [SerializeField] bool sortearCaminhoSaida = true;
     [SerializeField] float[] valoresPagamento = { 20f, 50f, 100f };
@@ -77,6 +85,10 @@ public class SistemaCaixa : MonoBehaviour
     GameObject npcAtual;
     Pickup produtoAtual;
     Pickup modeloProdutoAtual;
+    Pickup produtoDaPrateleiraAtual;
+    GameObject produtoCaixaPendente;
+    Pickup pickupProdutoCaixaPendente;
+    Transform raizProdutoDaPrateleiraAtual;
     ConfiguracaoClienteCaixa configuracaoAtual;
 
     // Indices usados para evitar repeticao e andar pelos waypoints.
@@ -146,6 +158,11 @@ public class SistemaCaixa : MonoBehaviour
 
         // Reaproveita os pontos ja presentes na cena quando os campos novos estiverem vazios.
         PrepararPontosDaCena();
+        PrepararInteractables();
+        PrepararProdutosDaPrateleira();
+        PrepararStoreModel();
+        PrepararProdutosDoEstoque();
+        PrepararColisaoDaLoja();
 
         // Monta as listas de fallback a partir do Inspector e do que ja existe na cena.
         PrepararModelosNpc();
@@ -162,7 +179,15 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
-        if (indicesConfiguracoesValidas.Count == 0 && (modelosNpc.Count == 0 || modelosProduto.Count == 0))
+        bool podeUsarPrateleira = pegarProdutosDaPrateleira && interactables != null;
+        if (indicesConfiguracoesValidas.Count == 0 && modelosNpc.Count == 0)
+        {
+            Debug.LogWarning("SistemaCaixa precisa de pelo menos um NPC configurado.", this);
+            enabled = false;
+            return;
+        }
+
+        if (!podeUsarPrateleira && indicesConfiguracoesValidas.Count == 0 && modelosProduto.Count == 0)
         {
             Debug.LogWarning("SistemaCaixa precisa de pelo menos um NPC e um produto configurados.", this);
             enabled = false;
@@ -188,7 +213,12 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
-        if (estadoAtual == EstadoCliente.IndoAoCaixa)
+        if (estadoAtual == EstadoCliente.IndoAoProduto)
+        {
+            // Faz o NPC andar ate o produto escolhido na prateleira.
+            MoverNpcParaProduto();
+        }
+        else if (estadoAtual == EstadoCliente.IndoAoCaixa)
         {
             // Faz o NPC seguir os pontos de entrada antes de parar na frente do caixa.
             MoverNpcPeloCaminho(
@@ -239,6 +269,8 @@ public class SistemaCaixa : MonoBehaviour
 
         GameObject modeloNpcEscolhido = null;
         modeloProdutoAtual = null;
+        produtoDaPrateleiraAtual = null;
+        raizProdutoDaPrateleiraAtual = null;
         configuracaoAtual = null;
 
         // Tenta usar primeiro uma configuracao completa com rota propria.
@@ -270,6 +302,13 @@ public class SistemaCaixa : MonoBehaviour
         indiceWaypointEntradaAtual = 0;
         indiceWaypointSaidaAtual = 0;
 
+        if (pegarProdutosDaPrateleira && TentarEscolherProdutoDaPrateleira())
+        {
+            // Troca o produto configurado por um item real que esta na aba Interactables.
+            modeloProdutoAtual = produtoDaPrateleiraAtual;
+            PrepararProdutoPendenteDoCaixa(produtoDaPrateleiraAtual);
+        }
+
         if (modeloNpcEscolhido == null || modeloProdutoAtual == null)
         {
             Debug.LogWarning("SistemaCaixa nao conseguiu escolher um NPC ou produto valido.", this);
@@ -294,6 +333,30 @@ public class SistemaCaixa : MonoBehaviour
             interacaoClone.enabled = false;
         }
 
+        estadoAtual = produtoDaPrateleiraAtual != null ? EstadoCliente.IndoAoProduto : EstadoCliente.IndoAoCaixa;
+    }
+
+    void MoverNpcParaProduto()
+    {
+        if (produtoDaPrateleiraAtual == null || raizProdutoDaPrateleiraAtual == null)
+        {
+            estadoAtual = EstadoCliente.IndoAoCaixa;
+            return;
+        }
+
+        if (!TentarCalcularPontoAproximacaoProduto(raizProdutoDaPrateleiraAtual, out Vector3 posicaoProduto))
+        {
+            // Se nao existe ponto alcançavel perto do item, o cliente nao atravessa a loja para roubar caminho.
+            return;
+        }
+
+        if (!MoverNpcAte(posicaoProduto, distanciaChegadaProduto))
+        {
+            return;
+        }
+
+        // Ao chegar na prateleira, o cliente tira o produto inteiro dali.
+        produtoDaPrateleiraAtual.RetirarDaPrateleiraParaNpc();
         estadoAtual = EstadoCliente.IndoAoCaixa;
     }
 
@@ -334,6 +397,12 @@ public class SistemaCaixa : MonoBehaviour
         totalCompra = pickup.ObterPrecoProduto();
         valorPago = SortearValorPago(totalCompra);
         troco = Mathf.Max(0f, valorPago - totalCompra);
+
+        if (produtoDaPrateleiraAtual != null)
+        {
+            // Libera o espaco vazio da prateleira para aceitar reposicao vinda do estoque.
+            produtoDaPrateleiraAtual.LiberarDepoisDoAtendimento();
+        }
 
         estadoAtual = EstadoCliente.AguardandoTroco;
         produtoAtual = null;
@@ -412,12 +481,24 @@ public class SistemaCaixa : MonoBehaviour
 
     bool MoverNpcAte(Vector3 destino)
     {
+        return MoverNpcAte(destino, distanciaChegadaWaypoint);
+    }
+
+    bool MoverNpcAte(Vector3 destino, float distanciaChegada)
+    {
+        // O NPC usa apenas o pathfinding fisico por colisao para manter um comportamento unico.
+        return MoverNpcComPathfindingFisico(destino, distanciaChegada);
+    }
+
+    bool MoverNpcDiretoPara(Vector3 destino, float distanciaChegada)
+    {
+        // Este movimento direto so e usado entre pontos ja aprovados pelo pathfinding fisico.
         Vector3 posicaoAtual = npcAtual.transform.position;
         Vector3 destinoPlano = new Vector3(destino.x, posicaoAtual.y, destino.z);
         Vector3 direcao = destinoPlano - posicaoAtual;
         direcao.y = 0f;
 
-        if (direcao.sqrMagnitude <= distanciaChegadaWaypoint * distanciaChegadaWaypoint)
+        if (direcao.sqrMagnitude <= distanciaChegada * distanciaChegada)
         {
             npcAtual.transform.position = destinoPlano;
             return true;
@@ -432,6 +513,216 @@ public class SistemaCaixa : MonoBehaviour
         }
 
         return false;
+    }
+
+    bool MoverNpcComPathfindingFisico(Vector3 destino, float distanciaChegada)
+    {
+        // Metodo principal de movimento do cliente: recebe um destino e segue um caminho aprovado por colisao.
+        if (npcAtual == null)
+        {
+            return false;
+        }
+
+        // Mantem o destino no mesmo Y do NPC para evitar que altura de prateleira puxe o personagem para cima/baixo.
+        Vector3 posicaoAtual = npcAtual.transform.position;
+        Vector3 destinoPlano = new Vector3(destino.x, posicaoAtual.y, destino.z);
+
+        // Se ja chegou perto o suficiente, encerra o caminho atual.
+        if (Vector3.Distance(posicaoAtual, destinoPlano) <= distanciaChegada)
+        {
+            npcAtual.transform.position = destinoPlano;
+            return true;
+        }
+
+        // O desvio fisico testa poucos passos por frame, evitando travar o jogo com busca em grade.
+        TentarAndarComDesvio(destinoPlano);
+        return false;
+    }
+
+    void TentarAndarComDesvio(Vector3 destino)
+    {
+        Vector3 posicaoAtual = npcAtual.transform.position;
+        Vector3 direcaoPrincipal = destino - posicaoAtual;
+        direcaoPrincipal.y = 0f;
+
+        if (direcaoPrincipal.sqrMagnitude < 0.0001f)
+        {
+            return;
+        }
+
+        direcaoPrincipal.Normalize();
+
+        // Primeiro tenta andar reto; se tiver parede, tenta pequenas aberturas laterais.
+        float[] angulos = { 0f, 25f, -25f, 50f, -50f, 80f, -80f, 120f, -120f, 180f };
+        for (int i = 0; i < angulos.Length; i++)
+        {
+            Vector3 direcaoTeste = Quaternion.Euler(0f, angulos[i], 0f) * direcaoPrincipal;
+            if (TentarMoverPassoFisico(direcaoTeste))
+            {
+                return;
+            }
+        }
+    }
+
+    bool TentarMoverPassoFisico(Vector3 direcao)
+    {
+        // Move apenas um passo pequeno ja validado contra os colliders reais da loja.
+        Vector3 posicaoAtual = npcAtual.transform.position;
+        Vector3 proximaPosicao = posicaoAtual + direcao.normalized * velocidadeNpc * Time.deltaTime;
+
+        if (!PosicaoLivreParaNpc(proximaPosicao))
+        {
+            return false;
+        }
+
+        if (TemParedeEntrePontos(posicaoAtual, proximaPosicao))
+        {
+            return false;
+        }
+
+        npcAtual.transform.position = proximaPosicao;
+        npcAtual.transform.rotation = Quaternion.LookRotation(direcao.normalized, Vector3.up);
+        return true;
+    }
+
+    bool PosicaoLivreParaNpc(Vector3 posicao)
+    {
+        // Primeiro confirma que existe piso abaixo desse ponto.
+        if (!TemChaoAbaixo(posicao))
+        {
+            return false;
+        }
+
+        // Depois checa volumes horizontais do corpo; isso evita confundir o chao com parede.
+        Vector3 pontoBaixo = posicao + Vector3.up * 0.45f;
+        Vector3 pontoAlto = posicao + Vector3.up * Mathf.Max(0.9f, alturaAgenteNpc * 0.75f);
+
+        if (ExisteParedeNoPonto(pontoBaixo) || ExisteParedeNoPonto(pontoAlto))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ExisteParedeNoPonto(Vector3 pontoCorpo)
+    {
+        // Usa uma esfera na altura do corpo para detectar paredes/prateleiras sem encostar no chao.
+        Collider[] colisoes = Physics.OverlapSphere(pontoCorpo, raioAgenteNpc, ~0, QueryTriggerInteraction.Ignore);
+
+        for (int i = 0; i < colisoes.Length; i++)
+        {
+            Collider colisao = colisoes[i];
+            if (!ColliderBloqueiaNpc(colisao))
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    bool TemParedeEntrePontos(Vector3 origem, Vector3 destino)
+    {
+        // CapsuleCast bloqueia o passo quando a "capsula do corpo" bateria em parede do modelo da loja.
+        Vector3 deslocamento = destino - origem;
+        deslocamento.y = 0f;
+        float distancia = deslocamento.magnitude;
+
+        if (distancia <= 0.0001f)
+        {
+            return false;
+        }
+
+        Vector3 direcao = deslocamento / distancia;
+        Vector3 baseCapsula = origem + Vector3.up * 0.35f;
+        Vector3 topoCapsula = origem + Vector3.up * Mathf.Max(0.7f, alturaAgenteNpc - 0.15f);
+        RaycastHit[] impactos = Physics.CapsuleCastAll(baseCapsula, topoCapsula, raioAgenteNpc, direcao, distancia, ~0, QueryTriggerInteraction.Ignore);
+
+        for (int i = 0; i < impactos.Length; i++)
+        {
+            RaycastHit impacto = impactos[i];
+            if (!ColliderBloqueiaNpc(impacto.collider))
+            {
+                continue;
+            }
+
+            if (impacto.normal.y > 0.55f)
+            {
+                // Normal apontando para cima e piso/rampa, nao parede.
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    bool ColliderBloqueiaNpc(Collider colisao)
+    {
+        if (colisao == null)
+        {
+            return false;
+        }
+
+        if (npcAtual != null && colisao.transform.IsChildOf(npcAtual.transform))
+        {
+            return false;
+        }
+
+        if (colisao.isTrigger)
+        {
+            return false;
+        }
+
+        if (colisao.GetComponentInParent<Pickup>() != null)
+        {
+            // Produtos pequenos nao bloqueiam rota de cliente.
+            return false;
+        }
+
+        return true;
+    }
+
+    bool TemChaoAbaixo(Vector3 posicao)
+    {
+        // Raycast vertical: se algo solido esta logo abaixo do pe, a celula e pisavel.
+        RaycastHit[] impactos = Physics.RaycastAll(posicao + Vector3.up * 2f, Vector3.down, 5f, ~0, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < impactos.Length; i++)
+        {
+            Collider colisao = impactos[i].collider;
+            if (colisao == null)
+            {
+                continue;
+            }
+
+            if (npcAtual != null && colisao.transform.IsChildOf(npcAtual.transform))
+            {
+                continue;
+            }
+
+            if (colisao.GetComponentInParent<Pickup>() != null)
+            {
+                continue;
+            }
+
+            // Considera chao apenas quando a superficie esta abaixo do pe do NPC.
+            if (impactos[i].point.y <= posicao.y + 0.25f)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool SegmentoLivreParaNpc(Vector3 origem, Vector3 destino)
+    {
+        // Mantido como leitura simples para outros trechos: livre significa sem parede no caminho.
+        return !TemParedeEntrePontos(origem, destino) && PosicaoLivreParaNpc(destino);
     }
 
     void PrepararPontosDaCena()
@@ -476,6 +767,175 @@ public class SistemaCaixa : MonoBehaviour
             {
                 spawnProduto = spawnProdutoObject.transform;
             }
+        }
+    }
+
+    void PrepararColisaoDaLoja()
+    {
+        AutoShopCollision colisaoLoja = Object.FindFirstObjectByType<AutoShopCollision>();
+        if (colisaoLoja == null)
+        {
+            GameObject alvo = storeModel != null ? storeModel.gameObject : GameObject.Find("StoreModel");
+            if (alvo == null)
+            {
+                alvo = GameObject.Find("shop");
+            }
+
+            if (alvo == null)
+            {
+                Debug.LogWarning("SistemaCaixa nao encontrou StoreModel/shop para preparar colisoes da loja.", this);
+                return;
+            }
+
+            // Adiciona o preparador automaticamente para nao depender de configuracao manual.
+            colisaoLoja = alvo.AddComponent<AutoShopCollision>();
+        }
+
+        colisaoLoja.PrepararColisoesDaLoja();
+    }
+
+    bool TentarCalcularPontoAproximacaoProduto(Transform produto, out Vector3 pontoAproximacao)
+    {
+        pontoAproximacao = Vector3.zero;
+        if (produto == null)
+        {
+            return false;
+        }
+
+        // Calcula um ponto ao redor do produto, mas so aceita se houver caminho fisico ate ele.
+        Bounds bounds = ObterBoundsProduto(produto);
+        Vector3 centro = bounds.center;
+        Vector3 origem = npcAtual != null ? npcAtual.transform.position : spawnNPC.position;
+        Vector3 direcaoBase = centro - origem;
+        direcaoBase.y = 0f;
+
+        if (direcaoBase.sqrMagnitude < 0.01f)
+        {
+            direcaoBase = Vector3.forward;
+        }
+
+        direcaoBase.Normalize();
+
+        float raioProduto = Mathf.Max(bounds.extents.x, bounds.extents.z);
+        float distancia = raioProduto + distanciaAproximacaoProduto;
+        Vector3 melhorPonto = centro - direcaoBase * distancia;
+        melhorPonto.y = npcAtual != null ? npcAtual.transform.position.y : spawnNPC.position.y;
+
+        if (TentarObterPontoComCaminho(melhorPonto, out pontoAproximacao))
+        {
+            return true;
+        }
+
+        // Testa pontos em volta do produto para achar um corredor navegavel perto da prateleira.
+        for (int i = 0; i < 16; i++)
+        {
+            float angulo = (360f / 16f) * i;
+            Vector3 direcao = Quaternion.Euler(0f, angulo, 0f) * Vector3.forward;
+            Vector3 candidato = centro + direcao * distancia;
+            candidato.y = npcAtual != null ? npcAtual.transform.position.y : spawnNPC.position.y;
+
+            if (TentarObterPontoComCaminho(candidato, out pontoAproximacao))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    Bounds ObterBoundsProduto(Transform produto)
+    {
+        Renderer[] renderers = produto.GetComponentsInChildren<Renderer>(true);
+        if (renderers.Length == 0)
+        {
+            return new Bounds(produto.position, Vector3.one);
+        }
+
+        Bounds bounds = renderers[0].bounds;
+        for (int i = 1; i < renderers.Length; i++)
+        {
+            bounds.Encapsulate(renderers[i].bounds);
+        }
+
+        return bounds;
+    }
+
+    bool TentarObterPontoComCaminho(Vector3 candidato, out Vector3 pontoNavegavel)
+    {
+        pontoNavegavel = candidato;
+        if (npcAtual == null)
+        {
+            return PosicaoLivreParaNpc(candidato);
+        }
+
+        // No sistema leve, o ponto precisa estar livre; o desvio por frame cuida do caminho ate ele.
+        return PosicaoLivreParaNpc(candidato);
+    }
+
+    void PrepararInteractables()
+    {
+        if (interactables != null)
+        {
+            return;
+        }
+
+        // Procura a aba/objeto Interactables automaticamente para pegar produtos da prateleira.
+        GameObject interactablesObject = GameObject.Find("Interactables");
+        if (interactablesObject != null)
+        {
+            interactables = interactablesObject.transform;
+        }
+    }
+
+    void PrepararStoreModel()
+    {
+        if (storeModel != null)
+        {
+            return;
+        }
+
+        // Procura o StoreModel automaticamente para achar os itens de estoque.
+        GameObject storeModelObject = GameObject.Find("StoreModel");
+        if (storeModelObject != null)
+        {
+            storeModel = storeModelObject.transform;
+        }
+    }
+
+    void PrepararProdutosDaPrateleira()
+    {
+        if (interactables == null)
+        {
+            return;
+        }
+
+        Pickup[] pickups = interactables.GetComponentsInChildren<Pickup>(true);
+        for (int i = 0; i < pickups.Length; i++)
+        {
+            Pickup pickup = pickups[i];
+            Transform raizProduto = ObterRaizProdutoDentroDeInteractables(pickup);
+            pickup.ConfigurarComoProdutoDePrateleira(raizProduto);
+        }
+    }
+
+    void PrepararProdutosDoEstoque()
+    {
+        if (storeModel == null)
+        {
+            return;
+        }
+
+        Pickup[] pickups = storeModel.GetComponentsInChildren<Pickup>(true);
+        for (int i = 0; i < pickups.Length; i++)
+        {
+            Pickup pickup = pickups[i];
+            if (ProdutoPertenceAInteractables(pickup))
+            {
+                continue;
+            }
+
+            Transform raizProduto = ObterRaizProdutoDentroDoEstoque(pickup);
+            pickup.ConfigurarComoProdutoDeEstoque(raizProduto);
         }
     }
 
@@ -706,6 +1166,12 @@ public class SistemaCaixa : MonoBehaviour
                     continue;
                 }
 
+                if (ProdutoPertenceAInteractables(pickupDaCena))
+                {
+                    // Produtos da prateleira sao escolhidos pelo fluxo novo, nao viram modelo escondido.
+                    continue;
+                }
+
                 AdicionarModeloProduto(pickupDaCena);
             }
         }
@@ -744,10 +1210,17 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
-        if (modelo.gameObject.scene.IsValid())
+        if (ProdutoPertenceAInteractables(modelo))
+        {
+            // Mantem produtos reais da prateleira visiveis no cenario.
+            return;
+        }
+
+        Transform raizModelo = modelo.ObterRaizProduto();
+        if (raizModelo != null && raizModelo.gameObject.scene.IsValid())
         {
             // Mantem o produto-base escondido quando ele for um objeto da cena.
-            modelo.gameObject.SetActive(false);
+            raizModelo.gameObject.SetActive(false);
         }
 
         modelosProduto.Add(modelo);
@@ -772,11 +1245,229 @@ public class SistemaCaixa : MonoBehaviour
             return null;
         }
 
-        // Cria uma copia do produto no ponto de spawn configurado.
-        Pickup novoProduto = Instantiate(modeloProdutoAtual, spawnProduto.position, spawnProduto.rotation);
-        novoProduto.name = modeloProdutoAtual.name;
-        novoProduto.gameObject.SetActive(true);
+        if (pickupProdutoCaixaPendente != null)
+        {
+            // Mostra no caixa a copia que foi criada antes da prateleira ser esvaziada.
+            return ColocarProdutoPendenteNoSpawn();
+        }
+
+        if (produtoDaPrateleiraAtual != null)
+        {
+            // Vende uma copia do produto; o produto-base da prateleira fica escondido como slot vazio.
+            return CriarCopiaDoProdutoNoCaixa(produtoDaPrateleiraAtual);
+        }
+
+        Transform raizModelo = modeloProdutoAtual.ObterRaizProduto();
+        if (raizModelo == null)
+        {
+            return null;
+        }
+
+        return CriarCopiaDoProdutoNoCaixa(modeloProdutoAtual);
+    }
+
+    void PrepararProdutoPendenteDoCaixa(Pickup produtoBase)
+    {
+        LimparProdutoPendenteDoCaixa();
+
+        Pickup copia = CriarCopiaDoProdutoNoCaixa(produtoBase);
+        if (copia == null)
+        {
+            return;
+        }
+
+        Transform raizCopia = copia.ObterRaizProduto();
+        produtoCaixaPendente = raizCopia != null ? raizCopia.gameObject : copia.gameObject;
+        pickupProdutoCaixaPendente = copia;
+
+        // A copia ja existe antes do item da prateleira sumir, mas so aparece quando o cliente chega ao caixa.
+        produtoCaixaPendente.SetActive(false);
+    }
+
+    Pickup ColocarProdutoPendenteNoSpawn()
+    {
+        if (pickupProdutoCaixaPendente == null || produtoCaixaPendente == null || spawnProduto == null)
+        {
+            LimparProdutoPendenteDoCaixa();
+            return null;
+        }
+
+        produtoCaixaPendente.transform.SetParent(null);
+        produtoCaixaPendente.transform.position = spawnProduto.position;
+        produtoCaixaPendente.transform.rotation = spawnProduto.rotation;
+        AtivarObjetoInteiro(produtoCaixaPendente.transform);
+        pickupProdutoCaixaPendente.ConfigurarComoProdutoDoCaixa(produtoCaixaPendente.transform);
+
+        Pickup produtoPronto = pickupProdutoCaixaPendente;
+        produtoCaixaPendente = null;
+        pickupProdutoCaixaPendente = null;
+        return produtoPronto;
+    }
+
+    void LimparProdutoPendenteDoCaixa()
+    {
+        if (produtoCaixaPendente != null)
+        {
+            Destroy(produtoCaixaPendente);
+        }
+
+        produtoCaixaPendente = null;
+        pickupProdutoCaixaPendente = null;
+    }
+
+    Pickup CriarCopiaDoProdutoNoCaixa(Pickup produtoBase)
+    {
+        Transform raizModelo = produtoBase.ObterRaizProduto();
+        if (raizModelo == null)
+        {
+            return null;
+        }
+
+        // Clona a raiz completa do produto para assets formados por varios children.
+        GameObject novoObjeto = Instantiate(raizModelo.gameObject, spawnProduto.position, spawnProduto.rotation);
+        novoObjeto.name = raizModelo.name;
+        novoObjeto.SetActive(true);
+        AtivarObjetoInteiro(novoObjeto.transform);
+
+        Pickup novoProduto = novoObjeto.GetComponentInChildren<Pickup>(true);
+        if (novoProduto == null)
+        {
+            Debug.LogWarning("O produto clonado nao possui Pickup em nenhum child.", novoObjeto);
+            return null;
+        }
+
+        // Marca a copia como item vendido para ela sumir depois de passar no scanner.
+        novoProduto.ConfigurarComoProdutoDoCaixa(novoObjeto.transform);
         return novoProduto;
+    }
+
+    void AtivarObjetoInteiro(Transform raiz)
+    {
+        if (raiz == null)
+        {
+            return;
+        }
+
+        // Garante que a copia apareca mesmo quando o produto-base estava escondido na prateleira.
+        raiz.gameObject.SetActive(true);
+        for (int i = 0; i < raiz.childCount; i++)
+        {
+            AtivarObjetoInteiro(raiz.GetChild(i));
+        }
+
+        Renderer[] renderers = raiz.GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            renderers[i].enabled = true;
+        }
+
+        Collider[] colliders = raiz.GetComponentsInChildren<Collider>(true);
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            colliders[i].enabled = true;
+        }
+    }
+
+    bool TentarEscolherProdutoDaPrateleira()
+    {
+        if (interactables == null)
+        {
+            return false;
+        }
+
+        PrepararProdutosDaPrateleira();
+
+        List<Pickup> produtosDisponiveis = new List<Pickup>();
+        Pickup[] pickups = interactables.GetComponentsInChildren<Pickup>(true);
+        for (int i = 0; i < pickups.Length; i++)
+        {
+            if (pickups[i].EstaDisponivelNaPrateleira())
+            {
+                produtosDisponiveis.Add(pickups[i]);
+            }
+        }
+
+        if (produtosDisponiveis.Count == 0)
+        {
+            return false;
+        }
+
+        produtoDaPrateleiraAtual = produtosDisponiveis[Random.Range(0, produtosDisponiveis.Count)];
+        if (!produtoDaPrateleiraAtual.ReservarParaNpc())
+        {
+            produtoDaPrateleiraAtual = null;
+            return false;
+        }
+
+        raizProdutoDaPrateleiraAtual = produtoDaPrateleiraAtual.ObterRaizProduto();
+        return raizProdutoDaPrateleiraAtual != null;
+    }
+
+    Transform ObterRaizProdutoDentroDeInteractables(Pickup pickup)
+    {
+        if (pickup == null || interactables == null)
+        {
+            return pickup != null ? pickup.transform : null;
+        }
+
+        Transform atual = pickup.transform;
+        while (atual.parent != null && atual.parent != interactables)
+        {
+            atual = atual.parent;
+        }
+
+        // O filho direto de Interactables representa o produto completo na prateleira.
+        return atual;
+    }
+
+    Transform ObterRaizProdutoDentroDoEstoque(Pickup pickup)
+    {
+        if (pickup == null)
+        {
+            return null;
+        }
+
+        Transform containerEstoque = ObterContainerEstoque(pickup.transform);
+        if (containerEstoque == null)
+        {
+            containerEstoque = storeModel;
+        }
+
+        Transform atual = pickup.transform;
+        while (atual.parent != null && atual.parent != containerEstoque)
+        {
+            atual = atual.parent;
+        }
+
+        // O filho direto do container de estoque representa o produto completo.
+        return atual;
+    }
+
+    Transform ObterContainerEstoque(Transform origem)
+    {
+        Transform atual = origem;
+        while (atual != null && atual != storeModel)
+        {
+            string nome = atual.name.ToLowerInvariant();
+            if (nome.Contains("estoque") || nome.Contains("stock"))
+            {
+                return atual;
+            }
+
+            atual = atual.parent;
+        }
+
+        return null;
+    }
+
+    bool ProdutoPertenceAInteractables(Pickup pickup)
+    {
+        if (pickup == null || interactables == null)
+        {
+            return false;
+        }
+
+        return pickup.transform == interactables || pickup.transform.IsChildOf(interactables);
     }
 
     int SortearIndiceNpc()
@@ -1011,14 +1702,19 @@ public class SistemaCaixa : MonoBehaviour
 
         if (produtoAtual != null)
         {
-            Destroy(produtoAtual.gameObject);
+            // Remove a raiz inteira do produto clonado, nao apenas o child que tem o Pickup.
+            Transform raizProdutoAtual = produtoAtual.ObterRaizProduto();
+            Destroy(raizProdutoAtual != null ? raizProdutoAtual.gameObject : produtoAtual.gameObject);
             produtoAtual = null;
         }
 
+        LimparProdutoPendenteDoCaixa();
         trocoDigitadoEmCentavos = string.Empty;
         mensagemTrocoAtual = string.Empty;
         avisoTrocoAtual = string.Empty;
         configuracaoAtual = null;
+        produtoDaPrateleiraAtual = null;
+        raizProdutoDaPrateleiraAtual = null;
         caminhoEntradaAtual.Clear();
         caminhoSaidaAtual.Clear();
         indiceWaypointEntradaAtual = 0;
