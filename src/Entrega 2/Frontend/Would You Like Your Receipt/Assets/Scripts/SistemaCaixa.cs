@@ -1,6 +1,21 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+
+[System.Serializable]
+public class ConfiguracaoClienteCaixa
+{
+    // Nome opcional para identificar esta variacao no Inspector.
+    public string nomeVariacao = "Cliente";
+    // Modelo do NPC usado nesta variacao.
+    public GameObject npc;
+    // Produto que este NPC leva ate o caixa.
+    public Pickup produto;
+    // Caminho de entrada definido por Empty Objects espalhados pelo mercado.
+    public Transform[] caminhoEntrada;
+    // Caminho de saida definido por Empty Objects ate a porta do mercado.
+    public Transform[] caminhoSaida;
+}
 
 public class SistemaCaixa : MonoBehaviour
 {
@@ -27,6 +42,8 @@ public class SistemaCaixa : MonoBehaviour
     // Campos extras para cadastrar mais NPCs e produtos no Inspector.
     [SerializeField] GameObject[] npcsExtras;
     [SerializeField] Pickup[] produtosExtras;
+    // Lista principal de variacoes. Cada entrada pode ter NPC, produto e caminho proprios.
+    [SerializeField] ConfiguracaoClienteCaixa[] configuracoesClientes = new ConfiguracaoClienteCaixa[8];
 
     // Pontos de apoio para o fluxo de entrada e saida.
     [SerializeField] Transform[] caminhoEntrada;
@@ -46,38 +63,59 @@ public class SistemaCaixa : MonoBehaviour
     [SerializeField] bool evitarRepetirNpcEmSequencia = true;
     [SerializeField] int maximoDigitosTroco = 6;
 
+    // Listas auxiliares montadas em runtime.
     readonly List<GameObject> modelosNpc = new List<GameObject>();
     readonly List<Pickup> modelosProduto = new List<Pickup>();
     readonly List<Transform> caminhoEntradaAtual = new List<Transform>();
     readonly List<Transform> caminhoSaidaAtual = new List<Transform>();
+    readonly List<int> indicesConfiguracoesValidas = new List<int>();
 
+    // Estado atual do sistema.
     EstadoCliente estadoAtual = EstadoCliente.AguardandoProximoCliente;
 
+    // Referencias do atendimento atual.
     GameObject npcAtual;
     Pickup produtoAtual;
     Pickup modeloProdutoAtual;
+    ConfiguracaoClienteCaixa configuracaoAtual;
 
+    // Indices usados para evitar repeticao e andar pelos waypoints.
     int ultimoIndiceNpc = -1;
+    int ultimoIndiceConfiguracao = -1;
     int indiceWaypointEntradaAtual;
     int indiceWaypointSaidaAtual;
 
+    // Dados financeiros do atendimento atual.
     float totalCompra;
     float valorPago;
     float troco;
 
+    // Diz se o sistema encontrou tudo que precisava para funcionar.
     bool sistemaPronto;
 
+    // Estado da digitacao do troco.
     string trocoDigitadoEmCentavos = string.Empty;
     string mensagemTrocoAtual = string.Empty;
     string avisoTrocoAtual = string.Empty;
 
+    private void OnValidate()
+    {
+        // Mantem oito espacos prontos no Inspector para facilitar montar as variacoes.
+        if (configuracoesClientes == null || configuracoesClientes.Length < 8)
+        {
+            System.Array.Resize(ref configuracoesClientes, 8);
+        }
+    }
+
     private void OnEnable()
     {
+        // Se inscreve no evento do scanner para reagir quando um produto for lido.
         Scanner.ProdutoEscaneado += AoProdutoEscaneado;
     }
 
     private void OnDisable()
     {
+        // Remove a inscricao para evitar chamadas indevidas em objetos destruidos.
         Scanner.ProdutoEscaneado -= AoProdutoEscaneado;
     }
 
@@ -109,9 +147,13 @@ public class SistemaCaixa : MonoBehaviour
         // Reaproveita os pontos ja presentes na cena quando os campos novos estiverem vazios.
         PrepararPontosDaCena();
 
-        // Monta as listas de NPCs e produtos a partir do Inspector e do que ja existe na cena.
+        // Monta as listas de fallback a partir do Inspector e do que ja existe na cena.
         PrepararModelosNpc();
         PrepararModelosProduto();
+
+        // Prepara as configuracoes completas de cliente e suas rotas.
+        PrepararConfiguracoesClientes();
+        PrepararIndicesConfiguracoesValidas();
 
         if (scanner == null || spawnNPC == null || despawnNPC == null || spawnProduto == null)
         {
@@ -120,7 +162,7 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
-        if (modelosNpc.Count == 0 || modelosProduto.Count == 0)
+        if (indicesConfiguracoesValidas.Count == 0 && (modelosNpc.Count == 0 || modelosProduto.Count == 0))
         {
             Debug.LogWarning("SistemaCaixa precisa de pelo menos um NPC e um produto configurados.", this);
             enabled = false;
@@ -148,7 +190,7 @@ public class SistemaCaixa : MonoBehaviour
 
         if (estadoAtual == EstadoCliente.IndoAoCaixa)
         {
-            // Faz o NPC seguir pelos Empty Objects da entrada antes de parar no caixa.
+            // Faz o NPC seguir os pontos de entrada antes de parar na frente do caixa.
             MoverNpcPeloCaminho(
                 caminhoEntradaAtual,
                 ref indiceWaypointEntradaAtual,
@@ -159,7 +201,7 @@ public class SistemaCaixa : MonoBehaviour
         }
         else if (estadoAtual == EstadoCliente.IndoEmbora)
         {
-            // Faz o NPC seguir pelos Empty Objects da saida antes de sumir da cena.
+            // Faz o NPC seguir os pontos de saida antes de desaparecer na porta.
             MoverNpcPeloCaminho(
                 caminhoSaidaAtual,
                 ref indiceWaypointSaidaAtual,
@@ -177,6 +219,7 @@ public class SistemaCaixa : MonoBehaviour
 
     IEnumerator RotinaClientes()
     {
+        // Loop principal: espera um tempo, cria um cliente e so segue quando ele termina.
         while (true)
         {
             yield return new WaitForSeconds(tempoEntreClientes);
@@ -191,11 +234,41 @@ public class SistemaCaixa : MonoBehaviour
 
     void IniciarAtendimento()
     {
+        // Limpa qualquer sobra do atendimento anterior.
         LimparAtendimentoAtual();
 
-        int indiceNpcEscolhido = SortearIndiceNpc();
-        GameObject modeloNpcEscolhido = modelosNpc[indiceNpcEscolhido];
-        modeloProdutoAtual = ObterProdutoDoNpc(indiceNpcEscolhido);
+        GameObject modeloNpcEscolhido = null;
+        modeloProdutoAtual = null;
+        configuracaoAtual = null;
+
+        // Tenta usar primeiro uma configuracao completa com rota propria.
+        if (TentarEscolherConfiguracaoCliente())
+        {
+            modeloNpcEscolhido = configuracaoAtual.npc;
+            modeloProdutoAtual = configuracaoAtual.produto;
+
+            // Mantem exatamente a ordem dos pontos definida para este NPC.
+            PrepararCaminhoOrdenado(configuracaoAtual.caminhoEntrada, caminhoEntradaAtual);
+            PrepararCaminhoOrdenado(configuracaoAtual.caminhoSaida, caminhoSaidaAtual);
+        }
+        else
+        {
+            // Fallback antigo: sorteia NPC e produto separadamente.
+            int indiceNpcEscolhido = SortearIndiceNpc();
+            modeloNpcEscolhido = modelosNpc[indiceNpcEscolhido];
+            modeloProdutoAtual = ObterProdutoDoNpc(indiceNpcEscolhido);
+
+            // Usa os arrays antigos de caminho, podendo embaralhar se desejado.
+            PrepararCaminhoAtual(caminhoEntrada, caminhoEntradaAtual, sortearCaminhoEntrada);
+            PrepararCaminhoAtual(caminhoSaida, caminhoSaidaAtual, sortearCaminhoSaida);
+            ultimoIndiceNpc = indiceNpcEscolhido;
+        }
+
+        // Remove spawn e despawn caso eles tenham sido incluidos por engano na lista.
+        RemoverPontoDoCaminho(caminhoEntradaAtual, spawnNPC);
+        RemoverPontoDoCaminho(caminhoSaidaAtual, despawnNPC);
+        indiceWaypointEntradaAtual = 0;
+        indiceWaypointSaidaAtual = 0;
 
         if (modeloNpcEscolhido == null || modeloProdutoAtual == null)
         {
@@ -204,35 +277,29 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
+        // Zera os valores financeiros do novo atendimento.
         totalCompra = 0f;
         valorPago = 0f;
         troco = 0f;
 
+        // Cria o NPC na entrada do mercado.
         npcAtual = Instantiate(modeloNpcEscolhido, spawnNPC.position, spawnNPC.rotation);
         npcAtual.name = modeloNpcEscolhido.name;
         npcAtual.SetActive(true);
 
-        // Sorteia os waypoints deste atendimento para cada cliente fazer um caminho diferente.
-        PrepararCaminhoAtual(caminhoEntrada, caminhoEntradaAtual, sortearCaminhoEntrada);
-        PrepararCaminhoAtual(caminhoSaida, caminhoSaidaAtual, sortearCaminhoSaida);
-        RemoverPontoDoCaminho(caminhoEntradaAtual, spawnNPC);
-        RemoverPontoDoCaminho(caminhoSaidaAtual, despawnNPC);
-        indiceWaypointEntradaAtual = 0;
-        indiceWaypointSaidaAtual = 0;
-
         NPCInteraction interacaoClone = npcAtual.GetComponent<NPCInteraction>();
         if (interacaoClone != null)
         {
-            // O cliente do caixa nao precisa da interacao manual enquanto estiver no fluxo.
+            // O cliente do caixa nao usa interacao manual enquanto participa do fluxo.
             interacaoClone.enabled = false;
         }
 
         estadoAtual = EstadoCliente.IndoAoCaixa;
-        ultimoIndiceNpc = indiceNpcEscolhido;
     }
 
     void AoChegarNoCaixa()
     {
+        // Quando o NPC chega ao caixa, cria o produto dele no ponto de spawn.
         produtoAtual = SpawnarProdutoAtual();
 
         if (produtoAtual == null)
@@ -263,6 +330,7 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
+        // Calcula total, pagamento e troco assim que o item correto e lido.
         totalCompra = pickup.ObterPrecoProduto();
         valorPago = SortearValorPago(totalCompra);
         troco = Mathf.Max(0f, valorPago - totalCompra);
@@ -284,6 +352,7 @@ public class SistemaCaixa : MonoBehaviour
     {
         if (goalManager != null)
         {
+            // Conta o cliente como atendido e mostra confirmacao na tela.
             goalManager.ClienteAtendido();
             goalManager.MostrarMensagem("Troco entregue: R$ " + FormatarDinheiro(troco), 3f);
         }
@@ -300,6 +369,7 @@ public class SistemaCaixa : MonoBehaviour
     {
         if (npcAtual != null)
         {
+            // Remove o NPC da cena quando ele chega ao ponto de saida.
             Destroy(npcAtual);
             npcAtual = null;
         }
@@ -315,7 +385,7 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
-        // Ignora referencias vazias para nao travar o NPC se algum Empty Object for removido.
+        // Ignora referencias vazias para nao travar o NPC se algum ponto for apagado.
         while (indiceWaypointAtual < caminhoAtual.Count && caminhoAtual[indiceWaypointAtual] == null)
         {
             indiceWaypointAtual++;
@@ -331,7 +401,7 @@ public class SistemaCaixa : MonoBehaviour
 
         if (seguindoWaypoint)
         {
-            // Avanca para o proximo Empty Object sorteado antes de ir para o destino final.
+            // Quando chega em um ponto, passa para o proximo antes de mirar o destino final.
             indiceWaypointAtual++;
             return;
         }
@@ -357,7 +427,7 @@ public class SistemaCaixa : MonoBehaviour
 
         if (direcao.sqrMagnitude > 0.0001f)
         {
-            // Mantem a rotacao apenas no plano horizontal para evitar giro torto.
+            // Mantem a rotacao apenas no plano horizontal para evitar movimento torto.
             npcAtual.transform.rotation = Quaternion.LookRotation(direcao.normalized, Vector3.up);
         }
 
@@ -409,6 +479,116 @@ public class SistemaCaixa : MonoBehaviour
         }
     }
 
+    void PrepararConfiguracoesClientes()
+    {
+        if (configuracoesClientes == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < configuracoesClientes.Length; i++)
+        {
+            ConfiguracaoClienteCaixa configuracao = configuracoesClientes[i];
+            if (configuracao == null)
+            {
+                continue;
+            }
+
+            if (configuracao.npc != null && configuracao.npc.scene.IsValid())
+            {
+                NPCInteraction interacao = configuracao.npc.GetComponent<NPCInteraction>();
+                if (interacao != null)
+                {
+                    // Desliga a interacao manual no modelo-base do NPC.
+                    interacao.enabled = false;
+                }
+
+                // Mantem o modelo-base do NPC escondido quando ele for um objeto da cena.
+                configuracao.npc.SetActive(false);
+            }
+
+            if (configuracao.produto != null && configuracao.produto.gameObject.scene.IsValid())
+            {
+                // Mantem o produto-base escondido quando ele for um objeto da cena.
+                configuracao.produto.gameObject.SetActive(false);
+            }
+        }
+    }
+
+    void PrepararIndicesConfiguracoesValidas()
+    {
+        indicesConfiguracoesValidas.Clear();
+
+        if (configuracoesClientes == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < configuracoesClientes.Length; i++)
+        {
+            ConfiguracaoClienteCaixa configuracao = configuracoesClientes[i];
+            if (configuracao == null)
+            {
+                continue;
+            }
+
+            if (configuracao.npc == null || configuracao.produto == null)
+            {
+                continue;
+            }
+
+            // Guarda apenas as configuracoes que tem NPC e produto prontos.
+            indicesConfiguracoesValidas.Add(i);
+        }
+    }
+
+    bool TentarEscolherConfiguracaoCliente()
+    {
+        PrepararIndicesConfiguracoesValidas();
+        configuracaoAtual = null;
+
+        if (indicesConfiguracoesValidas.Count == 0)
+        {
+            return false;
+        }
+
+        int indiceListaEscolhido = Random.Range(0, indicesConfiguracoesValidas.Count);
+
+        if (evitarRepetirNpcEmSequencia && indicesConfiguracoesValidas.Count > 1)
+        {
+            // Tenta evitar repetir a mesma variacao duas vezes seguidas.
+            int tentativas = 0;
+            while (indicesConfiguracoesValidas[indiceListaEscolhido] == ultimoIndiceConfiguracao && tentativas < 10)
+            {
+                indiceListaEscolhido = Random.Range(0, indicesConfiguracoesValidas.Count);
+                tentativas++;
+            }
+        }
+
+        ultimoIndiceConfiguracao = indicesConfiguracoesValidas[indiceListaEscolhido];
+        configuracaoAtual = configuracoesClientes[ultimoIndiceConfiguracao];
+        return configuracaoAtual != null;
+    }
+
+    void PrepararCaminhoOrdenado(Transform[] caminhoBase, List<Transform> caminhoAtual)
+    {
+        caminhoAtual.Clear();
+
+        if (caminhoBase == null || caminhoBase.Length == 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < caminhoBase.Length; i++)
+        {
+            if (caminhoBase[i] != null)
+            {
+                // Mantem exatamente a ordem colocada no Inspector para este NPC.
+                caminhoAtual.Add(caminhoBase[i]);
+            }
+        }
+    }
+
     void PrepararCaminhoAtual(Transform[] caminhoBase, List<Transform> caminhoAtual, bool sortearPontos)
     {
         caminhoAtual.Clear();
@@ -422,14 +602,14 @@ public class SistemaCaixa : MonoBehaviour
         {
             if (caminhoBase[i] != null)
             {
-                // Copia somente os Empty Objects validos para a rota deste cliente.
+                // Copia somente os pontos validos para a rota deste cliente.
                 caminhoAtual.Add(caminhoBase[i]);
             }
         }
 
         if (sortearPontos)
         {
-            // Embaralha os pontos para cada NPC ter uma variacao de caminho.
+            // Embaralha os pontos para o modo antigo ter variacao.
             EmbaralharCaminho(caminhoAtual);
         }
     }
@@ -457,7 +637,7 @@ public class SistemaCaixa : MonoBehaviour
         {
             if (caminho[i] == pontoIgnorado)
             {
-                // Evita sortear o ponto usado apenas como spawn ou despawn.
+                // Evita repetir o ponto usado apenas como spawn ou despawn.
                 caminho.RemoveAt(i);
             }
         }
@@ -497,6 +677,7 @@ public class SistemaCaixa : MonoBehaviour
             }
         }
 
+        // Ordena para manter o pareamento previsivel entre NPC1, NPC2 e os produtos.
         modelosNpc.Sort((a, b) => string.Compare(a.name, b.name));
     }
 
@@ -529,6 +710,7 @@ public class SistemaCaixa : MonoBehaviour
             }
         }
 
+        // Ordena para manter o pareamento previsivel entre Box1, Box2 e os NPCs.
         modelosProduto.Sort((a, b) => string.Compare(a.name, b.name));
     }
 
@@ -546,7 +728,12 @@ public class SistemaCaixa : MonoBehaviour
             interacao.enabled = false;
         }
 
-        modelo.SetActive(false);
+        if (modelo.scene.IsValid())
+        {
+            // Mantem o modelo-base escondido quando ele for um objeto da cena.
+            modelo.SetActive(false);
+        }
+
         modelosNpc.Add(modelo);
     }
 
@@ -557,7 +744,12 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
-        modelo.gameObject.SetActive(false);
+        if (modelo.gameObject.scene.IsValid())
+        {
+            // Mantem o produto-base escondido quando ele for um objeto da cena.
+            modelo.gameObject.SetActive(false);
+        }
+
         modelosProduto.Add(modelo);
     }
 
@@ -580,6 +772,7 @@ public class SistemaCaixa : MonoBehaviour
             return null;
         }
 
+        // Cria uma copia do produto no ponto de spawn configurado.
         Pickup novoProduto = Instantiate(modeloProdutoAtual, spawnProduto.position, spawnProduto.rotation);
         novoProduto.name = modeloProdutoAtual.name;
         novoProduto.gameObject.SetActive(true);
@@ -600,6 +793,7 @@ public class SistemaCaixa : MonoBehaviour
             return indiceSorteado;
         }
 
+        // Tenta evitar repetir o mesmo NPC duas vezes seguidas.
         int tentativas = 0;
         while (indiceSorteado == ultimoIndiceNpc && tentativas < 10)
         {
@@ -614,6 +808,7 @@ public class SistemaCaixa : MonoBehaviour
     {
         bool houveMudanca = false;
 
+        // Le os caracteres digitados neste frame para montar o valor do troco.
         foreach (char caractere in Input.inputString)
         {
             if (char.IsDigit(caractere))
@@ -675,6 +870,7 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
+        // Monta a mensagem completa exibida na tela enquanto o jogador digita.
         string textoTroco =
             mensagemTrocoAtual +
             "\nTroco digitado: R$ " + FormatarTrocoDigitado();
@@ -698,7 +894,7 @@ public class SistemaCaixa : MonoBehaviour
         Vector3 eixoEntradaSaida = despawnNPC.position - spawnNPC.position;
         eixoEntradaSaida.y = 0f;
 
-        // Se o fluxo principal for horizontal, mantem o NPC andando da esquerda para a direita.
+        // Mantem o NPC alinhado ao mesmo corredor principal da entrada e da saida.
         if (Mathf.Abs(eixoEntradaSaida.x) >= Mathf.Abs(eixoEntradaSaida.z))
         {
             pontoParada.z = spawnNPC.position.z;
@@ -756,6 +952,7 @@ public class SistemaCaixa : MonoBehaviour
             return true;
         }
 
+        // Ignora a altura para medir apenas a distancia horizontal ate o caixa.
         Vector3 posicaoJogador = jogador.position;
         Vector3 posicaoScanner = scanner.transform.position;
         posicaoJogador.y = 0f;
@@ -778,6 +975,7 @@ public class SistemaCaixa : MonoBehaviour
 
         if (valoresValidos.Count == 0)
         {
+            // Se nenhum valor configurado cobrir a compra, cria um fallback simples.
             return preco + 10f;
         }
 
@@ -786,11 +984,13 @@ public class SistemaCaixa : MonoBehaviour
 
     string FormatarDinheiro(float valor)
     {
+        // Usa duas casas e virgula para combinar com o formato brasileiro.
         return valor.ToString("F2").Replace(".", ",");
     }
 
     float ObterValorTrocoDigitado()
     {
+        // Converte o texto digitado em centavos para um valor decimal em reais.
         long centavos = 0;
         long.TryParse(trocoDigitadoEmCentavos, out centavos);
         return centavos / 100f;
@@ -818,5 +1018,10 @@ public class SistemaCaixa : MonoBehaviour
         trocoDigitadoEmCentavos = string.Empty;
         mensagemTrocoAtual = string.Empty;
         avisoTrocoAtual = string.Empty;
+        configuracaoAtual = null;
+        caminhoEntradaAtual.Clear();
+        caminhoSaidaAtual.Clear();
+        indiceWaypointEntradaAtual = 0;
+        indiceWaypointSaidaAtual = 0;
     }
 }
