@@ -13,7 +13,7 @@
 ## Descrição
 
 <p align="center">
-<img src="https://pix4free.org/assets/library/2021-01-20/originals/game.jpg" alt="NOME DO JOGO" border="0">
+<img src="file:///C:/Users/26028627/Downloads/WOULD%20YOU%20LIKE%20YOUR%20RECEIPT.png" alt="Would you like your receipt?" border="0">
   Game by <a href="http://www.nyphotographic.com/">Nick Youngson</a> <a rel="license" href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a> <a href="http://pix4free.org/">Pix4free</a>
 </p>
 
@@ -75,7 +75,7 @@ Coloque código do prompt de comnando se for necessário
 ```
 
 ## 📋 Licença/License
-<a href="https://github.com/2026-1-MCC1/Projeto2">Would You Like Your Receipt?</a> © 2026 by <a href="https://github.com/M0ntesP, https://github.com/Krentell, https://github.com/Pihetra013>Guilherme da Silva Montes, Kris Pascali Janjiulio, Pietra Augusto Farias Ruiz, FECAP </a> is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a><img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;">
+<a href="https://github.com/2026-1-MCC1/Projeto2">Would You Like Your Receipt?</a> © 2026 by <a href="https://github.com/M0ntesP, https://github.com/Krentell, https://github.com/Pihetra013>Guilherme da Silva Montes, Kris Pascali Janjiulio, Pietra Augusto Farias Ruiz, FECAP </a> is licensed under <"https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a><img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;">
 
 ## 🎓 Referências
 
