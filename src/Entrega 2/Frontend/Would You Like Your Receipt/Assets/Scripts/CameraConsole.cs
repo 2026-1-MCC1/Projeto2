@@ -1,7 +1,9 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class CameraConsole : MonoBehaviour
 {
+    // Este script controla o sistema de cameras de seguranca.
+    // Ele alterna entre a camera principal do jogador e as cameras cadastradas no Inspector.
     // Lista de cameras de seguranca que podem ser vistas pelo console.
     public GameObject[] Cameras;
     // Indice da camera atualmente selecionada.
@@ -17,21 +19,22 @@ public class CameraConsole : MonoBehaviour
     // Tempo minimo entre uma troca de camera e outra.
     public float CoolDownTime = 0.5f;
 
-    void Start()
+    private void Start()
     {
-        // Desativa todas as cameras de seguranca ao iniciar a cena.
-        for (int i = 0; i < Cameras.Length; i++)
-        {
-            Cameras[i].SetActive(false);
-        }
+        // No inicio, todas as cameras de seguranca ficam desligadas.
+        // Assim o jogador sempre comeca vendo pela camera principal.
+        // Desliga todas as cameras secundarias e deixa apenas a visao principal ligada.
+        DesativarTodasAsCameras();
 
-        // Garante que a visao normal do jogador comece ativa.
-        MainCamera.SetActive(true);
+        if (MainCamera != null)
+        {
+            MainCamera.SetActive(true);
+        }
     }
 
-    
-    void Update()
+    private void Update()
     {
+        // O Update verifica input a cada frame, porque abrir e trocar cameras depende do teclado.
         // Abre ou fecha a tela de cameras.
         if (Input.GetKeyDown(OpenCameras))
         {
@@ -39,66 +42,120 @@ public class CameraConsole : MonoBehaviour
             ShowCamera();
         }
 
-        // Permite trocar de camera somente quando o cooldown terminou.
-        if (CoolDownTimer <= 0)
+        // Sem cameras configuradas, o resto do fluxo nao precisa rodar.
+        if (Cameras == null || Cameras.Length == 0)
         {
-            // Vai para a proxima camera da lista.
-            if (Input.GetAxis("Horizontal") > 0)
-            {
-                Cameras[CurrentCam].SetActive(false);
-                CurrentCam = CurrentCam + 1;
-                if (CurrentCam >= Cameras.Length)
-                {
-                    CurrentCam = 0;
-                }
-                GoToCamera(CurrentCam);
-                CoolDownTimer = CoolDownTime;
-            }
-            // Vai para a camera anterior da lista.
-            else if (Input.GetAxis("Horizontal") < 0)
-            {
-                Cameras[CurrentCam].SetActive(false);
-                CurrentCam = CurrentCam - 1;
-                if (CurrentCam < 0)
-                {
-                    CurrentCam = Cameras.Length - 1;
-                }
-                GoToCamera(CurrentCam);
-                CoolDownTimer = CoolDownTime;
-            }
+            return;
         }
-        else
+
+        if (CoolDownTimer > 0f)
         {
             // Reduz o tempo restante ate a proxima troca ser liberada.
             CoolDownTimer -= Time.deltaTime;
+            return;
+        }
+
+        // Permite trocar de camera somente quando o cooldown terminou.
+        if (Input.GetAxis("Horizontal") > 0f)
+        {
+            GoToCamera(CurrentCam + 1);
+        }
+        else if (Input.GetAxis("Horizontal") < 0f)
+        {
+            GoToCamera(CurrentCam - 1);
         }
     }
+
     private void ShowCamera()
     {
-        // Liga o console de cameras e libera o cursor para interacao.
+        // Esta funcao centraliza o que acontece ao abrir ou fechar o console de cameras.
+        // Sem cameras configuradas, apenas garante que a camera principal fique ativa.
+        if (Cameras == null || Cameras.Length == 0)
+        {
+            if (MainCamera != null)
+            {
+                MainCamera.SetActive(true);
+            }
+
+            return;
+        }
+
+        CurrentCam = Mathf.Clamp(CurrentCam, 0, Cameras.Length - 1);
+
         if (CamerasOpen)
         {
+            // Liga a camera escolhida do console e libera o cursor para interacao.
             Cameras[CurrentCam].SetActive(true);
-            MainCamera.SetActive(false);
+
+            if (MainCamera != null)
+            {
+                MainCamera.SetActive(false);
+            }
+
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
-        // Volta para a camera principal do jogador.
         else
         {
+            // Volta para a camera principal e fecha a visao do console.
             Cameras[CurrentCam].SetActive(false);
-            MainCamera.SetActive(true);
+
+            if (MainCamera != null)
+            {
+                MainCamera.SetActive(true);
+            }
+
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
     }
 
-    public void GoToCamera(int Progression)
+    public void GoToCamera(int progression)
     {
-        // Desliga a camera atual antes de ativar a nova escolhida.
-        Cameras[CurrentCam].SetActive(false);
-        CurrentCam = Progression;
+        // Troca a camera atual usando um indice novo.
+        // O modulo circular permite ir da ultima camera para a primeira, e vice-versa.
+        if (Cameras == null || Cameras.Length == 0)
+        {
+            return;
+        }
+
+        // Desliga a camera atual antes de ativar a proxima quando o console estiver aberto.
+        if (CamerasOpen)
+        {
+            Cameras[CurrentCam].SetActive(false);
+        }
+
+        CurrentCam = ModuloCircular(progression, Cameras.Length);
+        CoolDownTimer = CoolDownTime;
         ShowCamera();
     }
-}
 
+    private void DesativarTodasAsCameras()
+    {
+        // Desativa todas as cameras secundarias para impedir que duas fiquem renderizando juntas.
+        if (Cameras == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < Cameras.Length; i++)
+        {
+            if (Cameras[i] != null)
+            {
+                Cameras[i].SetActive(false);
+            }
+        }
+    }
+
+    private int ModuloCircular(int valor, int total)
+    {
+        // Garante que o indice volte para o inicio ou para o fim sem estourar o array.
+        if (total <= 0)
+        {
+            return 0;
+        }
+
+        int resultado = valor % total;
+        return resultado < 0 ? resultado + total : resultado;
+    }
+}

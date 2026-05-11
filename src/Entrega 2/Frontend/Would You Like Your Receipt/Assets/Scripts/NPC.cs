@@ -2,14 +2,17 @@
 
 public class NPCInteraction : MonoBehaviour
 {
-    // DistÃ¢ncia mÃ¡xima para o jogador interagir com o NPC
+    // Este script serve para NPCs parados/interagiveis da cena.
+    // Os clientes automaticos do caixa desativam este componente para nao conflitar com a fila.
+    // Script de interacao para NPCs fixos da cena.
+    // Distancia maxima para o jogador interagir com o NPC.
     public float interactionDistance = 3f;
 
-    // ReferÃªncia ao jogador (Transform = posiÃ§Ã£o dele no mundo)
+    // Referencia ao jogador para medir a distancia no mundo.
     public Transform player;
 
-    // Mensagem que o NPC vai falar
-    public string message = "OlÃ¡, pode me ajudar?";
+    // Mensagem que o NPC vai falar quando o jogador apertar E.
+    public string message = "Ola, pode me ajudar?";
     public float messageDuration = 2f;
 
     // Guarda a referencia para a UI que mostra as mensagens na tela.
@@ -17,6 +20,8 @@ public class NPCInteraction : MonoBehaviour
 
     private void Start()
     {
+        // No Start, o script encontra as referencias que precisa para funcionar.
+        // Isso evita depender de todos os campos preenchidos manualmente no Inspector.
         if (player == null)
         {
             // Procura o jogador automaticamente caso ele nao tenha sido ligado no Inspector.
@@ -35,20 +40,21 @@ public class NPCInteraction : MonoBehaviour
         }
     }
 
-    void Update()
+    private void Update()
     {
+        // A cada frame, verifica se o jogador esta perto e apertou E.
         if (player == null)
         {
             return;
         }
 
-        // Calcula a distÃ¢ncia entre o NPC e o jogador
+        // Calcula a distancia entre o NPC e o jogador.
         float distance = Vector3.Distance(transform.position, player.position);
 
-        // Verifica se o jogador estÃ¡ perto o suficiente
+        // Verifica se o jogador esta perto o suficiente.
         if (distance <= interactionDistance)
         {
-            // Verifica se o jogador apertou a tecla E
+            // Verifica se o jogador apertou a tecla E.
             if (Input.GetKeyDown(KeyCode.E))
             {
                 Interact();
@@ -56,8 +62,9 @@ public class NPCInteraction : MonoBehaviour
         }
     }
 
-    void Interact()
+    private void Interact()
     {
+        // Mostra a mensagem do NPC na UI e tambem no Console da Unity para debug.
         if (goalManager != null)
         {
             // Mostra a fala do NPC no mesmo texto usado pelos objetivos.
