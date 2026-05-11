@@ -1,25 +1,37 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.AI;
+using Unity.AI.Navigation;
+using UnityEngine.Serialization;
 
 [System.Serializable]
 public class ConfiguracaoClienteCaixa
 {
-    // Nome opcional para identificar esta variacao no Inspector.
+    // Nome livre para identificar esta variacao no Inspector.
     public string nomeVariacao = "Cliente";
     // Modelo do NPC usado nesta variacao.
     public GameObject npc;
-    // Produto que este NPC leva ate o caixa.
+    // Produto que este NPC leva para o caixa.
     public Pickup produto;
-    // Caminho de entrada definido por Empty Objects espalhados pelo mercado.
+    // Caminho proprio de entrada deste NPC, caso voce queira uma rota fixa para ele.
     public Transform[] caminhoEntrada;
-    // Caminho de saida definido por Empty Objects ate a porta do mercado.
+    // Caminho proprio de saida deste NPC, caso voce queira uma rota fixa para ele.
     public Transform[] caminhoSaida;
+}
+
+[System.Serializable]
+public class RotaWaypoint
+{
+    // Nome da rota para ficar facil de ler no Inspector.
+    public string nomeRota = "Rota";
+    // Lista ordenada dos pontos por onde o NPC vai passar.
+    public Transform[] pontos;
 }
 
 public class SistemaCaixa : MonoBehaviour
 {
-    // Estados do fluxo do cliente no caixa.
+    // Estados principais do fluxo de atendimento.
     enum EstadoCliente
     {
         AguardandoProximoCliente,
@@ -30,52 +42,147 @@ public class SistemaCaixa : MonoBehaviour
         IndoEmbora
     }
 
-    // Referencias principais do sistema.
+    // Referencia ao scanner do caixa.
     [SerializeField] Scanner scanner;
+    // Referencia ao GoalManager para contar objetivos.
     [SerializeField] GoalManager goalManager;
+    // Referencia ao jogador para validar a entrega do troco.
     [SerializeField] Transform jogador;
 
-    // Modelos legados que ja existem na cena.
+    // NPC principal legado da cena.
     [SerializeField] GameObject npcCliente;
+    // Produto principal legado da cena.
     [SerializeField] Pickup modeloProduto;
+    // Ponto onde o item aparece no caixa.
     [SerializeField] Transform spawnProduto;
 
-    // Campos extras para cadastrar mais NPCs e produtos no Inspector.
+    // Listas extras para adicionar mais NPCs e produtos no Inspector.
     [SerializeField] GameObject[] npcsExtras;
     [SerializeField] Pickup[] produtosExtras;
-    // Lista principal de variacoes. Cada entrada pode ter NPC, produto e caminho proprios.
+    // Configuracoes prontas para parear NPC + produto + rota fixa.
     [SerializeField] ConfiguracaoClienteCaixa[] configuracoesClientes = new ConfiguracaoClienteCaixa[8];
 
-    // Pontos de apoio para o fluxo de entrada e saida.
+    // Rotas aleatorias de entrada que podem ser sorteadas quando o NPC nao tiver rota propria.
+    [SerializeField] RotaWaypoint[] rotasEntradaAleatorias;
+    // Rotas aleatorias de saida que podem ser sorteadas quando o NPC nao tiver rota propria.
+    [SerializeField] RotaWaypoint[] rotasSaidaAleatorias;
+
+    // Fallback antigo de waypoints, caso voce prefira uma lista unica.
     [SerializeField] Transform[] caminhoEntrada;
+    // Fallback antigo de waypoints para a saida.
     [SerializeField] Transform[] caminhoSaida;
+    // Pontos possiveis de spawn do cliente.
     [SerializeField] Transform[] pontosSpawn;
+    // Ponto principal de spawn do cliente.
     [SerializeField] Transform spawnNPC;
+    // Ponto final onde o cliente some.
     [SerializeField] Transform despawnNPC;
-    [SerializeField] Transform interactables;
-    [SerializeField] Transform storeModel;
+    // Ponto manual onde ele deve parar em frente ao caixa.
+    [SerializeField] Transform pontoParadaCaixa;
+    // Raiz onde ficam os produtos reais e interagiveis usados como molde do item que nasce no caixa.
+    [FormerlySerializedAs("raizInteractables")]
+    [SerializeField] Transform raizProdutosInteragiveis;
+    // Raiz onde ficam os produtos apenas visuais da loja, que o NPC visita na prateleira.
+    [SerializeField] Transform raizProdutosVisuaisLoja;
+    // Raiz opcional que delimita quais produtos visuais realmente podem ser escolhidos pelo NPC.
+    [SerializeField] Transform raizProdutosAtendimentoNpc;
+    // Superficie de navegacao usada para o NPC respeitar as colisoes da loja.
+    [SerializeField] NavMeshSurface superficieNavMesh;
+    // Raiz usada para limitar a NavMesh so a area interna do mercado.
+    [SerializeField] Transform raizAreaNavMesh;
 
-    // Ajustes de comportamento.
+    // Velocidade de deslocamento do cliente.
     [SerializeField] float velocidadeNpc = 2.2f;
+    // Tempo para o NPC ganhar velocidade de forma mais natural.
+    [SerializeField] float aceleracaoNpc = 5.5f;
+    // Tempo para o NPC frear de forma mais natural perto dos pontos.
+    [SerializeField] float desaceleracaoNpc = 7.5f;
+    // Suaviza a rotacao do corpo do NPC quando ele muda de direcao.
+    [SerializeField] float velocidadeRotacaoNpc = 7f;
+    // Distancia em que o NPC comeca a reduzir a velocidade antes de parar.
+    [SerializeField] float distanciaFreioNpc = 1.1f;
+    // Faz o NPC diminuir um pouco a velocidade quando a curva e muito fechada.
+    [SerializeField] float velocidadeMinimaEmCurva = 0.55f;
+    // Tempo entre um cliente e outro.
     [SerializeField] float tempoEntreClientes = 4f;
+    // Distancia horizontal maxima para o jogador confirmar o troco.
     [SerializeField] float distanciaEntregaTroco = 2.5f;
-    [SerializeField] float distanciaChegadaWaypoint = 0.08f;
-    [SerializeField] float distanciaChegadaProduto = 0.45f;
-    [SerializeField] bool pegarProdutosDaPrateleira = true;
-    [SerializeField] float raioAgenteNpc = 0.35f;
-    [SerializeField] float alturaAgenteNpc = 1.8f;
-    [SerializeField] float distanciaAproximacaoProduto = 1.1f;
+    // Distancia usada para considerar que o NPC chegou ao waypoint.
+    [SerializeField] float distanciaChegadaWaypoint = 0.12f;
+    // Distancia minima entre o scanner e o item que nasce no caixa.
+    [SerializeField] float distanciaMinimaSpawnProdutoDoScanner = 1.05f;
+    // Tempo de protecao para o item nao ser lido pelo scanner no mesmo frame.
+    [SerializeField] float tempoIgnorarScannerAoSpawnar = 0.75f;
+    // Diz se o fallback antigo pode embaralhar os pontos de entrada.
     [SerializeField] bool sortearCaminhoEntrada = true;
+    // Diz se o fallback antigo pode embaralhar os pontos de saida.
     [SerializeField] bool sortearCaminhoSaida = true;
+    // Valores que o cliente pode usar para pagar.
     [SerializeField] float[] valoresPagamento = { 20f, 50f, 100f };
+    // Evita repetir o mesmo NPC duas vezes seguidas quando possivel.
     [SerializeField] bool evitarRepetirNpcEmSequencia = true;
+    // Limite maximo de digitos aceitos na digitacao do troco.
     [SerializeField] int maximoDigitosTroco = 6;
+    // Liga a montagem automatica de caminho ate um produto da loja antes do caixa.
+    [SerializeField] bool gerarCaminhoAutomaticoProdutos = true;
+    // Quantidade minima de waypoints escolhidos para ir ate o produto.
+    [SerializeField] int minimoPontosAteProduto = 1;
+    // Quantidade maxima de waypoints escolhidos para ir ate o produto.
+    [SerializeField] int maximoPontosAteProduto = 3;
+    // Quantidade minima de waypoints escolhidos do produto ate o caixa.
+    [SerializeField] int minimoPontosAteCaixa = 0;
+    // Quantidade maxima de waypoints escolhidos do produto ate o caixa.
+    [SerializeField] int maximoPontosAteCaixa = 2;
+    // Distancia que o NPC deve manter do produto visual para parar na frente dele.
+    [SerializeField] float distanciaParadaNoProduto = 1.1f;
+    // Diferenca minima de distancia para considerar que um waypoint realmente aproxima o NPC do destino.
+    [SerializeField] float toleranciaMelhoraWaypoint = 0.15f;
+    // Raio aproximado do corpo do NPC para detectar obstaculos ao andar.
+    [SerializeField] float raioColisaoNpc = 0.35f;
+    // Altura aproximada do corpo do NPC para detectar obstaculos ao andar.
+    [SerializeField] float alturaColisaoNpc = 1.8f;
+    // Pequena folga extra para parar antes de encostar no obstaculo.
+    [SerializeField] float margemColisaoNpc = 0.05f;
+    // Camadas que o NPC deve respeitar ao caminhar pela loja.
+    [SerializeField] LayerMask mascaraColisaoNpc = ~0;
+    // Liga o uso de NavMeshAgent para o NPC navegar pela loja.
+    [SerializeField] bool usarNavMesh = true;
+    // Decide se a NavMesh deve ser montada no Play ou se o sistema vai usar a malha ja assada no editor.
+    [SerializeField] bool construirNavMeshEmRuntime = false;
+    // Limita a NavMesh a um volume do mercado para o NPC nao tentar navegar pela rua.
+    [SerializeField] bool limitarNavMeshAoMercado = true;
+    // Distancia maxima para procurar uma posicao valida sobre o NavMesh.
+    [SerializeField] float raioAmostraNavMesh = 2.5f;
+    // Distancia usada para considerar que o agent chegou ao destino atual.
+    [SerializeField] float distanciaChegadaNavMesh = 0.2f;
+    // Aceleracao do NavMeshAgent.
+    [SerializeField] float aceleracaoNavMesh = 14f;
+    // Velocidade angular do NavMeshAgent para curvas mais naturais.
+    [SerializeField] float velocidadeAngularNavMesh = 540f;
+    // Margem extra aplicada ao volume da NavMesh para nao cortar corredor, entrada e caixa por muito pouco.
+    [SerializeField] Vector3 margemAreaNavMesh = new Vector3(1.5f, 2f, 1.5f);
+    // Limita os produtos do NPC aos mais proximos do caixa para evitar sorteio no fundo da loja.
+    [SerializeField] bool limitarProdutosPelaDistanciaAoCaixa = true;
+    // Distancia maxima do produto visual ate o caixa para ele entrar no sorteio do NPC.
+    [SerializeField] float distanciaMaximaProdutoDoCaixa = 9f;
+    // Quantos produtos mais proximos do caixa entram no sorteio quando houver muitos na loja.
+    [SerializeField] int quantidadeProdutosMaisProximos = 12;
 
-    // Listas auxiliares montadas em runtime.
+    // Modelos de NPC disponiveis para atendimento.
     readonly List<GameObject> modelosNpc = new List<GameObject>();
+    // Modelos de produto disponiveis para atendimento.
     readonly List<Pickup> modelosProduto = new List<Pickup>();
+    // Produtos reais da loja usados como destino visual para o cliente.
+    readonly List<Pickup> produtosDaLoja = new List<Pickup>();
+    // Pool de pontos que o sistema pode usar para montar caminhos automaticamente.
+    readonly List<Transform> pontosCaminhoAutomatico = new List<Transform>();
+    // Caminho temporario do spawn ate um produto da loja.
+    readonly List<Transform> caminhoProdutoAtual = new List<Transform>();
+    // Rota de entrada do cliente atual.
     readonly List<Transform> caminhoEntradaAtual = new List<Transform>();
+    // Rota de saida do cliente atual.
     readonly List<Transform> caminhoSaidaAtual = new List<Transform>();
+    // Indices das configuracoes realmente validas.
     readonly List<int> indicesConfiguracoesValidas = new List<int>();
 
     // Estado atual do sistema.
@@ -83,36 +190,54 @@ public class SistemaCaixa : MonoBehaviour
 
     // Referencias do atendimento atual.
     GameObject npcAtual;
+    NavMeshAgent agenteNpcAtual;
     Pickup produtoAtual;
+    Pickup produtoDestinoAtual;
     Pickup modeloProdutoAtual;
-    Pickup produtoDaPrateleiraAtual;
-    GameObject produtoCaixaPendente;
-    Pickup pickupProdutoCaixaPendente;
-    Transform raizProdutoDaPrateleiraAtual;
     ConfiguracaoClienteCaixa configuracaoAtual;
 
-    // Indices usados para evitar repeticao e andar pelos waypoints.
-    int ultimoIndiceNpc = -1;
-    int ultimoIndiceConfiguracao = -1;
+    // Indices dos waypoints em andamento.
+    int indiceWaypointProdutoAtual;
     int indiceWaypointEntradaAtual;
     int indiceWaypointSaidaAtual;
+    // Indices auxiliares para evitar repeticao.
+    int ultimoIndiceNpc = -1;
+    int ultimoIndiceConfiguracao = -1;
+    int ultimoIndiceRotaEntrada = -1;
+    int ultimoIndiceRotaSaida = -1;
 
-    // Dados financeiros do atendimento atual.
+    // Valores financeiros do atendimento atual.
     float totalCompra;
     float valorPago;
     float troco;
 
-    // Diz se o sistema encontrou tudo que precisava para funcionar.
+    // Controle geral para saber se o sistema conseguiu subir.
     bool sistemaPronto;
+    // Guarda a velocidade atual do NPC para acelerar e frear de forma mais suave.
+    float velocidadeNpcAtual;
+    // Ultima direcao valida usada para orientar o corpo do NPC.
+    Vector3 ultimaDirecaoMovimentoNpc = Vector3.forward;
+    // Guarda o ponto exato onde o NPC deve parar ao chegar ao produto visual da loja.
+    Vector3 posicaoParadaProdutoAtual;
+    // Indica se o ponto de parada do produto foi calculado para o atendimento atual.
+    bool possuiPosicaoParadaProdutoAtual;
+    // Guarda o ultimo destino enviado para o NavMeshAgent para evitar SetDestination a cada frame.
+    Vector3 ultimoDestinoNavMesh;
+    // Diz se o ultimo destino ja foi enviado ao agent durante o atendimento atual.
+    bool destinoNavMeshDefinido;
+    // Marca se a NavMesh ficou pronta para uso neste Play.
+    bool navMeshPronto;
 
-    // Estado da digitacao do troco.
+    // Texto digitado em centavos para a etapa do troco.
     string trocoDigitadoEmCentavos = string.Empty;
+    // Mensagem base mostrada ao jogador enquanto o troco esta sendo digitado.
     string mensagemTrocoAtual = string.Empty;
+    // Aviso de erro ou orientacao complementar.
     string avisoTrocoAtual = string.Empty;
 
     private void OnValidate()
     {
-        // Mantem oito espacos prontos no Inspector para facilitar montar as variacoes.
+        // Mantem oito espacos prontos no Inspector para facilitar a montagem do projeto.
         if (configuracoesClientes == null || configuracoesClientes.Length < 8)
         {
             System.Array.Resize(ref configuracoesClientes, 8);
@@ -121,13 +246,13 @@ public class SistemaCaixa : MonoBehaviour
 
     private void OnEnable()
     {
-        // Se inscreve no evento do scanner para reagir quando um produto for lido.
+        // Escuta o evento do scanner para reagir quando o item correto passar por ele.
         Scanner.ProdutoEscaneado += AoProdutoEscaneado;
     }
 
     private void OnDisable()
     {
-        // Remove a inscricao para evitar chamadas indevidas em objetos destruidos.
+        // Remove a inscricao para nao deixar evento pendurado em objeto destruido.
         Scanner.ProdutoEscaneado -= AoProdutoEscaneado;
     }
 
@@ -156,38 +281,25 @@ public class SistemaCaixa : MonoBehaviour
             }
         }
 
-        // Reaproveita os pontos ja presentes na cena quando os campos novos estiverem vazios.
+        // Resolve automaticamente os pontos principais da cena pelo nome.
         PrepararPontosDaCena();
-        PrepararInteractables();
-        PrepararProdutosDaPrateleira();
-        PrepararStoreModel();
-        PrepararProdutosDoEstoque();
-        PrepararColisaoDaLoja();
-
-        // Monta as listas de fallback a partir do Inspector e do que ja existe na cena.
+        // Garante que o array de configuracoes sempre exista em runtime.
+        PrepararConfiguracoesClientes();
+        // Monta as listas de NPCs e produtos usando os campos atuais da cena.
         PrepararModelosNpc();
         PrepararModelosProduto();
-
-        // Prepara as configuracoes completas de cliente e suas rotas.
-        PrepararConfiguracoesClientes();
+        PrepararProdutosDaLoja();
+        PrepararPontosCaminhoAutomatico();
         PrepararIndicesConfiguracoesValidas();
 
-        if (scanner == null || spawnNPC == null || despawnNPC == null || spawnProduto == null)
+        if (scanner == null || ObterPontoSpawnCliente() == null || despawnNPC == null || spawnProduto == null)
         {
-            Debug.LogWarning("SistemaCaixa nao encontrou Scanner, SpawnNPC, DespawnNPC ou SpawnObjects.", this);
+            Debug.LogWarning("SistemaCaixa precisa de Scanner, SpawnNPC, DespawnNPC e SpawnObjects.", this);
             enabled = false;
             return;
         }
 
-        bool podeUsarPrateleira = pegarProdutosDaPrateleira && interactables != null;
-        if (indicesConfiguracoesValidas.Count == 0 && modelosNpc.Count == 0)
-        {
-            Debug.LogWarning("SistemaCaixa precisa de pelo menos um NPC configurado.", this);
-            enabled = false;
-            return;
-        }
-
-        if (!podeUsarPrateleira && indicesConfiguracoesValidas.Count == 0 && modelosProduto.Count == 0)
+        if (indicesConfiguracoesValidas.Count == 0 && (modelosNpc.Count == 0 || (modelosProduto.Count == 0 && produtosDaLoja.Count == 0)))
         {
             Debug.LogWarning("SistemaCaixa precisa de pelo menos um NPC e um produto configurados.", this);
             enabled = false;
@@ -202,6 +314,8 @@ public class SistemaCaixa : MonoBehaviour
     {
         if (sistemaPronto)
         {
+            // Monta a NavMesh em runtime usando as colisoes atuais da cena sem apagar nada do usuario.
+            PrepararNavMeshDaLoja();
             StartCoroutine(RotinaClientes());
         }
     }
@@ -215,12 +329,18 @@ public class SistemaCaixa : MonoBehaviour
 
         if (estadoAtual == EstadoCliente.IndoAoProduto)
         {
-            // Faz o NPC andar ate o produto escolhido na prateleira.
-            MoverNpcParaProduto();
+            // Faz o cliente seguir primeiro um caminho automatico ate o produto escolhido.
+            MoverNpcPeloCaminho(
+                caminhoProdutoAtual,
+                ref indiceWaypointProdutoAtual,
+                ObterPosicaoProdutoDestinoAtual(),
+                EstadoCliente.IndoAoCaixa,
+                AoChegarNoProduto
+            );
         }
         else if (estadoAtual == EstadoCliente.IndoAoCaixa)
         {
-            // Faz o NPC seguir os pontos de entrada antes de parar na frente do caixa.
+            // Faz o cliente seguir a rota escolhida ate parar no ponto do caixa.
             MoverNpcPeloCaminho(
                 caminhoEntradaAtual,
                 ref indiceWaypointEntradaAtual,
@@ -231,7 +351,7 @@ public class SistemaCaixa : MonoBehaviour
         }
         else if (estadoAtual == EstadoCliente.IndoEmbora)
         {
-            // Faz o NPC seguir os pontos de saida antes de desaparecer na porta.
+            // Faz o cliente seguir a rota de saida ate o ponto de sumir.
             MoverNpcPeloCaminho(
                 caminhoSaidaAtual,
                 ref indiceWaypointSaidaAtual,
@@ -249,136 +369,551 @@ public class SistemaCaixa : MonoBehaviour
 
     IEnumerator RotinaClientes()
     {
-        // Loop principal: espera um tempo, cria um cliente e so segue quando ele termina.
+        // Loop principal que cria novos clientes ao longo da partida.
         while (true)
         {
-            yield return new WaitForSeconds(tempoEntreClientes);
-            IniciarAtendimento();
-
-            while (estadoAtual != EstadoCliente.AguardandoProximoCliente)
+            if (estadoAtual == EstadoCliente.AguardandoProximoCliente)
             {
-                yield return null;
+                yield return new WaitForSeconds(tempoEntreClientes);
+
+                if (estadoAtual == EstadoCliente.AguardandoProximoCliente)
+                {
+                    IniciarAtendimento();
+                }
             }
+
+            yield return null;
         }
     }
 
     void IniciarAtendimento()
     {
-        // Limpa qualquer sobra do atendimento anterior.
+        if (estadoAtual != EstadoCliente.AguardandoProximoCliente)
+        {
+            return;
+        }
+
+        // Limpa qualquer sobra do atendimento anterior antes de criar o proximo.
         LimparAtendimentoAtual();
 
         GameObject modeloNpcEscolhido = null;
+        bool usandoCaminhoAutomaticoParaProduto = false;
         modeloProdutoAtual = null;
-        produtoDaPrateleiraAtual = null;
-        raizProdutoDaPrateleiraAtual = null;
+        produtoDestinoAtual = null;
         configuracaoAtual = null;
 
-        // Tenta usar primeiro uma configuracao completa com rota propria.
         if (TentarEscolherConfiguracaoCliente())
         {
+            // Usa a configuracao pronta quando ela estiver preenchida no Inspector.
             modeloNpcEscolhido = configuracaoAtual.npc;
             modeloProdutoAtual = configuracaoAtual.produto;
-
-            // Mantem exatamente a ordem dos pontos definida para este NPC.
-            PrepararCaminhoOrdenado(configuracaoAtual.caminhoEntrada, caminhoEntradaAtual);
-            PrepararCaminhoOrdenado(configuracaoAtual.caminhoSaida, caminhoSaidaAtual);
+            PrepararRotaSaidaAtual(configuracaoAtual);
         }
         else
         {
-            // Fallback antigo: sorteia NPC e produto separadamente.
+            // Fallback antigo: sorteia um NPC e pareia o produto pela ordem da lista.
             int indiceNpcEscolhido = SortearIndiceNpc();
             modeloNpcEscolhido = modelosNpc[indiceNpcEscolhido];
             modeloProdutoAtual = ObterProdutoDoNpc(indiceNpcEscolhido);
-
-            // Usa os arrays antigos de caminho, podendo embaralhar se desejado.
-            PrepararCaminhoAtual(caminhoEntrada, caminhoEntradaAtual, sortearCaminhoEntrada);
-            PrepararCaminhoAtual(caminhoSaida, caminhoSaidaAtual, sortearCaminhoSaida);
             ultimoIndiceNpc = indiceNpcEscolhido;
+            PrepararRotaSaidaAtual(null);
         }
 
-        // Remove spawn e despawn caso eles tenham sido incluidos por engano na lista.
+        if (modeloProdutoAtual == null && produtosDaLoja.Count > 0)
+        {
+            // Se nao houver modelo configurado, usa um produto real da loja como fallback.
+            modeloProdutoAtual = SortearProdutoDaLoja();
+        }
+
+        if (gerarCaminhoAutomaticoProdutos && (configuracaoAtual == null || configuracaoAtual.caminhoEntrada == null || configuracaoAtual.caminhoEntrada.Length == 0))
+        {
+            // Tenta montar o caminho ate o produto e depois ate o caixa sem configuracao manual.
+            usandoCaminhoAutomaticoParaProduto = TentarPrepararCaminhosAutomaticosParaProduto();
+        }
+
+        if (!usandoCaminhoAutomaticoParaProduto)
+        {
+            PrepararRotaEntradaAtual(configuracaoAtual);
+        }
+
+        // Remove pontos proibidos caso tenham sido arrastados por engano para dentro das rotas.
+        RemoverPontoDoCaminho(caminhoProdutoAtual, spawnNPC);
+        RemoverPontoDoCaminho(caminhoProdutoAtual, despawnNPC);
         RemoverPontoDoCaminho(caminhoEntradaAtual, spawnNPC);
-        RemoverPontoDoCaminho(caminhoSaidaAtual, despawnNPC);
+        RemoverPontoDoCaminho(caminhoEntradaAtual, despawnNPC);
+        RemoverPontoDoCaminho(caminhoSaidaAtual, spawnNPC);
+
+        indiceWaypointProdutoAtual = 0;
         indiceWaypointEntradaAtual = 0;
         indiceWaypointSaidaAtual = 0;
 
-        if (pegarProdutosDaPrateleira && TentarEscolherProdutoDaPrateleira())
-        {
-            // Troca o produto configurado por um item real que esta na aba Interactables.
-            modeloProdutoAtual = produtoDaPrateleiraAtual;
-            PrepararProdutoPendenteDoCaixa(produtoDaPrateleiraAtual);
-        }
-
         if (modeloNpcEscolhido == null || modeloProdutoAtual == null)
         {
-            Debug.LogWarning("SistemaCaixa nao conseguiu escolher um NPC ou produto valido.", this);
+            Debug.LogWarning("SistemaCaixa nao conseguiu escolher um NPC ou um produto valido.", this);
             estadoAtual = EstadoCliente.AguardandoProximoCliente;
             return;
         }
 
-        // Zera os valores financeiros do novo atendimento.
+        // Zera os dados financeiros antes de começar o atendimento.
         totalCompra = 0f;
         valorPago = 0f;
         troco = 0f;
+        trocoDigitadoEmCentavos = string.Empty;
+        mensagemTrocoAtual = string.Empty;
+        avisoTrocoAtual = string.Empty;
 
-        // Cria o NPC na entrada do mercado.
-        npcAtual = Instantiate(modeloNpcEscolhido, spawnNPC.position, spawnNPC.rotation);
+        // Instancia o clone do cliente no ponto de spawn escolhido.
+        Transform pontoSpawn = ObterPontoSpawnCliente();
+        npcAtual = Instantiate(modeloNpcEscolhido, pontoSpawn.position, pontoSpawn.rotation);
         npcAtual.name = modeloNpcEscolhido.name;
         npcAtual.SetActive(true);
+        ultimaDirecaoMovimentoNpc = npcAtual.transform.forward.sqrMagnitude > 0.0001f ? npcAtual.transform.forward : Vector3.forward;
+        velocidadeNpcAtual = 0f;
 
-        NPCInteraction interacaoClone = npcAtual.GetComponent<NPCInteraction>();
-        if (interacaoClone != null)
-        {
-            // O cliente do caixa nao usa interacao manual enquanto participa do fluxo.
-            interacaoClone.enabled = false;
-        }
+        // Ajusta o clone para ele obedecer apenas ao sistema do caixa.
+        PrepararNpcClonado(npcAtual);
 
-        estadoAtual = produtoDaPrateleiraAtual != null ? EstadoCliente.IndoAoProduto : EstadoCliente.IndoAoCaixa;
+        estadoAtual = usandoCaminhoAutomaticoParaProduto ? EstadoCliente.IndoAoProduto : EstadoCliente.IndoAoCaixa;
     }
 
-    void MoverNpcParaProduto()
+    void PrepararNpcClonado(GameObject npcClonado)
     {
-        if (produtoDaPrateleiraAtual == null || raizProdutoDaPrateleiraAtual == null)
-        {
-            estadoAtual = EstadoCliente.IndoAoCaixa;
-            return;
-        }
-
-        if (!TentarCalcularPontoAproximacaoProduto(raizProdutoDaPrateleiraAtual, out Vector3 posicaoProduto))
-        {
-            // Se nao existe ponto alcançavel perto do item, o cliente nao atravessa a loja para roubar caminho.
-            return;
-        }
-
-        if (!MoverNpcAte(posicaoProduto, distanciaChegadaProduto))
+        if (npcClonado == null)
         {
             return;
         }
 
-        // Ao chegar na prateleira, o cliente tira o produto inteiro dali.
-        produtoDaPrateleiraAtual.RetirarDaPrateleiraParaNpc();
-        estadoAtual = EstadoCliente.IndoAoCaixa;
+        NPCInteraction interacao = npcClonado.GetComponent<NPCInteraction>();
+        if (interacao != null)
+        {
+            // Desliga a conversa do clone para nao conflitar com o fluxo automatico do caixa.
+            interacao.enabled = false;
+        }
+
+        Rigidbody[] rigidbodies = npcClonado.GetComponentsInChildren<Rigidbody>(true);
+        for (int i = 0; i < rigidbodies.Length; i++)
+        {
+            // Zera a fisica do clone para ele nao sair sambando pela cena.
+            if (!rigidbodies[i].isKinematic)
+            {
+                rigidbodies[i].linearVelocity = Vector3.zero;
+                rigidbodies[i].angularVelocity = Vector3.zero;
+            }
+
+            rigidbodies[i].isKinematic = true;
+            rigidbodies[i].useGravity = false;
+        }
+
+        Collider[] colliders = npcClonado.GetComponentsInChildren<Collider>(true);
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            // Garante que os colliders do modelo estejam ligados para o cast respeitar o proprio volume.
+            colliders[i].enabled = true;
+        }
+
+        // Liga o clone ao NavMeshAgent para ele navegar pela loja de forma mais robusta.
+        ConfigurarAgenteNpc(npcClonado);
+    }
+
+    void MoverNpcPeloCaminho(List<Transform> caminhoAtual, ref int indiceWaypointAtual, Vector3 destinoFinal, EstadoCliente proximoEstado, System.Action aoChegar)
+    {
+        if (npcAtual == null)
+        {
+            estadoAtual = EstadoCliente.AguardandoProximoCliente;
+            return;
+        }
+
+        if (MoverNpcPeloCaminhoComNavMesh(caminhoAtual, ref indiceWaypointAtual, destinoFinal, proximoEstado, aoChegar))
+        {
+            return;
+        }
+
+        // Ignora referencias nulas para nao travar a rota se algum waypoint for apagado.
+        while (indiceWaypointAtual < caminhoAtual.Count && caminhoAtual[indiceWaypointAtual] == null)
+        {
+            indiceWaypointAtual++;
+        }
+
+        bool seguindoWaypoint = indiceWaypointAtual < caminhoAtual.Count;
+        Vector3 destinoAtual = seguindoWaypoint ? caminhoAtual[indiceWaypointAtual].position : destinoFinal;
+
+        if (!MoverNpcAte(destinoAtual, distanciaChegadaWaypoint))
+        {
+            return;
+        }
+
+        if (seguindoWaypoint)
+        {
+            // Quando chega ao waypoint atual, passa para o proximo no frame seguinte.
+            indiceWaypointAtual++;
+            return;
+        }
+
+        estadoAtual = proximoEstado;
+        aoChegar?.Invoke();
+    }
+
+    bool MoverNpcPeloCaminhoComNavMesh(List<Transform> caminhoAtual, ref int indiceWaypointAtual, Vector3 destinoFinal, EstadoCliente proximoEstado, System.Action aoChegar)
+    {
+        if (!usarNavMesh || !navMeshPronto || agenteNpcAtual == null || !agenteNpcAtual.enabled || !agenteNpcAtual.isOnNavMesh)
+        {
+            return false;
+        }
+
+        // Ignora referencias nulas para nao travar a rota se algum waypoint for apagado.
+        while (indiceWaypointAtual < caminhoAtual.Count && caminhoAtual[indiceWaypointAtual] == null)
+        {
+            indiceWaypointAtual++;
+        }
+
+        bool seguindoWaypoint = indiceWaypointAtual < caminhoAtual.Count;
+        Vector3 destinoAtual = seguindoWaypoint ? caminhoAtual[indiceWaypointAtual].position : destinoFinal;
+
+        if (!TentarProjetarNoNavMesh(destinoAtual, out Vector3 destinoNavMesh))
+        {
+            if (seguindoWaypoint)
+            {
+                // Se um waypoint cair fora da malha, pula para o proximo em vez de congelar o NPC.
+                indiceWaypointAtual++;
+                destinoNavMeshDefinido = false;
+                return true;
+            }
+
+            return true;
+        }
+
+        DefinirDestinoNpcNoNavMesh(destinoNavMesh);
+
+        if (agenteNpcAtual.pathPending)
+        {
+            return true;
+        }
+
+        if (agenteNpcAtual.pathStatus == NavMeshPathStatus.PathInvalid)
+        {
+            if (seguindoWaypoint)
+            {
+                // Waypoint invalido nao derruba o fluxo inteiro; ele apenas sai da rota atual.
+                agenteNpcAtual.ResetPath();
+                destinoNavMeshDefinido = false;
+                indiceWaypointAtual++;
+                return true;
+            }
+
+            return true;
+        }
+
+        if (!AgenteNpcChegouAoDestino())
+        {
+            return true;
+        }
+
+        agenteNpcAtual.ResetPath();
+        destinoNavMeshDefinido = false;
+
+        if (seguindoWaypoint)
+        {
+            // Quando chega ao waypoint atual, avanca para o proximo.
+            indiceWaypointAtual++;
+            return true;
+        }
+
+        estadoAtual = proximoEstado;
+        aoChegar?.Invoke();
+        return true;
+    }
+
+    void DefinirDestinoNpcNoNavMesh(Vector3 destinoNavMesh)
+    {
+        if (agenteNpcAtual == null || !agenteNpcAtual.enabled || !agenteNpcAtual.isOnNavMesh)
+        {
+            return;
+        }
+
+        if (!destinoNavMeshDefinido || DistanciaPlana(ultimoDestinoNavMesh, destinoNavMesh) > 0.05f || !agenteNpcAtual.hasPath)
+        {
+            // Evita SetDestination desnecessario a cada frame e deixa o agent trabalhar com calma.
+            agenteNpcAtual.SetDestination(destinoNavMesh);
+            ultimoDestinoNavMesh = destinoNavMesh;
+            destinoNavMeshDefinido = true;
+        }
+    }
+
+    bool AgenteNpcChegouAoDestino()
+    {
+        if (agenteNpcAtual == null || !agenteNpcAtual.enabled || !agenteNpcAtual.isOnNavMesh)
+        {
+            return false;
+        }
+
+        if (agenteNpcAtual.pathPending)
+        {
+            return false;
+        }
+
+        if (agenteNpcAtual.remainingDistance > Mathf.Max(distanciaChegadaNavMesh, agenteNpcAtual.stoppingDistance))
+        {
+            return false;
+        }
+
+        // Quando a distancia ja e pequena e o agent praticamente parou, consideramos chegada.
+        return !agenteNpcAtual.hasPath || agenteNpcAtual.velocity.sqrMagnitude <= 0.01f;
+    }
+
+    bool MoverNpcAte(Vector3 destino, float distanciaChegada)
+    {
+        if (npcAtual == null)
+        {
+            return false;
+        }
+
+        Vector3 posicaoAtual = npcAtual.transform.position;
+        Vector3 destinoPlano = new Vector3(destino.x, posicaoAtual.y, destino.z);
+        Vector3 direcao = destinoPlano - posicaoAtual;
+        direcao.y = 0f;
+        float distanciaAteDestino = direcao.magnitude;
+
+        if (distanciaAteDestino <= distanciaChegada)
+        {
+            // Encaixa o cliente no destino ao chegar perto o bastante.
+            if (!MovimentoNpcEstaLivre(posicaoAtual, destinoPlano - posicaoAtual))
+            {
+                velocidadeNpcAtual = 0f;
+                return false;
+            }
+
+            velocidadeNpcAtual = 0f;
+            npcAtual.transform.position = destinoPlano;
+            return true;
+        }
+
+        Vector3 direcaoNormalizada = direcao / Mathf.Max(distanciaAteDestino, 0.0001f);
+        float velocidadeMaximaCurva = CalcularVelocidadeMaximaEmCurva(direcaoNormalizada);
+        float velocidadeAlvo = CalcularVelocidadeAlvo(distanciaAteDestino, velocidadeMaximaCurva);
+        float aceleracaoAtual = velocidadeNpcAtual < velocidadeAlvo ? aceleracaoNpc : desaceleracaoNpc;
+        velocidadeNpcAtual = Mathf.MoveTowards(velocidadeNpcAtual, velocidadeAlvo, aceleracaoAtual * Time.deltaTime);
+
+        Vector3 movimentoDesejado = direcaoNormalizada * Mathf.Min(velocidadeNpcAtual * Time.deltaTime, distanciaAteDestino);
+        Vector3 novaPosicao = posicaoAtual;
+        Vector3 direcaoMovimentoReal = direcaoNormalizada;
+
+        if (MovimentoNpcEstaLivre(posicaoAtual, movimentoDesejado))
+        {
+            // Move normalmente quando o passo atual estiver livre.
+            novaPosicao = posicaoAtual + movimentoDesejado;
+        }
+        else if (!TentarDesviarNpc(posicaoAtual, movimentoDesejado, direcao, out novaPosicao))
+        {
+            // Se houver parede ou MeshCollider no caminho, o NPC para e espera um caminho livre.
+            velocidadeNpcAtual = Mathf.MoveTowards(velocidadeNpcAtual, 0f, desaceleracaoNpc * Time.deltaTime);
+            return false;
+        }
+        else
+        {
+            Vector3 movimentoExecutado = novaPosicao - posicaoAtual;
+            if (movimentoExecutado.sqrMagnitude > 0.0001f)
+            {
+                direcaoMovimentoReal = movimentoExecutado.normalized;
+            }
+        }
+
+        npcAtual.transform.position = novaPosicao;
+        SuavizarRotacaoNpc(direcaoMovimentoReal);
+
+        if (direcaoMovimentoReal.sqrMagnitude > 0.0001f)
+        {
+            ultimaDirecaoMovimentoNpc = direcaoMovimentoReal;
+        }
+
+        return false;
+    }
+
+    float CalcularVelocidadeAlvo(float distanciaAteDestino, float velocidadeMaximaCurva)
+    {
+        float distanciaFreioNormalizada = Mathf.Max(distanciaChegadaWaypoint + 0.05f, distanciaFreioNpc);
+        float fatorDistancia = Mathf.InverseLerp(distanciaChegadaWaypoint, distanciaFreioNormalizada, distanciaAteDestino);
+        float velocidadeMinima = Mathf.Min(velocidadeMaximaCurva, velocidadeNpc * 0.2f);
+        return Mathf.Lerp(velocidadeMinima, velocidadeMaximaCurva, fatorDistancia);
+    }
+
+    float CalcularVelocidadeMaximaEmCurva(Vector3 direcaoAtual)
+    {
+        if (ultimaDirecaoMovimentoNpc.sqrMagnitude <= 0.0001f || direcaoAtual.sqrMagnitude <= 0.0001f)
+        {
+            return velocidadeNpc;
+        }
+
+        float anguloCurva = Vector3.Angle(ultimaDirecaoMovimentoNpc, direcaoAtual);
+        float fatorCurva = Mathf.InverseLerp(180f, 0f, anguloCurva);
+        return Mathf.Lerp(velocidadeNpc * velocidadeMinimaEmCurva, velocidadeNpc, fatorCurva);
+    }
+
+    void SuavizarRotacaoNpc(Vector3 direcaoDesejada)
+    {
+        if (npcAtual == null)
+        {
+            return;
+        }
+
+        Vector3 direcaoPlana = direcaoDesejada;
+        direcaoPlana.y = 0f;
+        if (direcaoPlana.sqrMagnitude <= 0.0001f)
+        {
+            return;
+        }
+
+        // Gira o corpo de forma suave para evitar aquelas viradas secas nos waypoints.
+        Quaternion rotacaoAlvo = Quaternion.LookRotation(direcaoPlana.normalized, Vector3.up);
+        npcAtual.transform.rotation = Quaternion.Slerp(
+            npcAtual.transform.rotation,
+            rotacaoAlvo,
+            velocidadeRotacaoNpc * Time.deltaTime
+        );
+    }
+
+    bool MovimentoNpcEstaLivre(Vector3 posicaoAtual, Vector3 movimento)
+    {
+        float distancia = movimento.magnitude;
+        if (distancia <= 0.0001f)
+        {
+            return true;
+        }
+
+        Vector3 direcao = movimento.normalized;
+        float raioCapsula = Mathf.Max(0.05f, raioColisaoNpc);
+        float alturaCapsula = Mathf.Max(raioCapsula * 2f + 0.05f, alturaColisaoNpc);
+        Vector3 baseCapsula = posicaoAtual + Vector3.up * raioCapsula;
+        Vector3 topoCapsula = posicaoAtual + Vector3.up * (alturaCapsula - raioCapsula);
+        RaycastHit[] hits = Physics.CapsuleCastAll(
+            baseCapsula,
+            topoCapsula,
+            raioCapsula,
+            direcao,
+            distancia + margemColisaoNpc,
+            mascaraColisaoNpc,
+            QueryTriggerInteraction.Ignore
+        );
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            Collider colliderAtingido = hits[i].collider;
+            if (colliderAtingido == null)
+            {
+                continue;
+            }
+
+            if (npcAtual != null && colliderAtingido.transform.IsChildOf(npcAtual.transform))
+            {
+                continue;
+            }
+
+            // Qualquer collider fisico, incluindo MeshCollider, bloqueia o passo do NPC.
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ExisteCaminhoLivreEntrePontos(Vector3 origem, Vector3 destino)
+    {
+        if (navMeshPronto && ExisteCaminhoNavMeshEntrePontos(origem, destino))
+        {
+            // Se a NavMesh disser que existe rota valida, deixamos o agent resolver o desvio real.
+            return true;
+        }
+
+        Vector3 movimento = destino - origem;
+        movimento.y = 0f;
+        return MovimentoNpcEstaLivre(origem, movimento);
+    }
+
+    bool ExisteCaminhoNavMeshEntrePontos(Vector3 origem, Vector3 destino)
+    {
+        if (!usarNavMesh || !navMeshPronto)
+        {
+            return false;
+        }
+
+        if (!TentarProjetarNoNavMesh(origem, out Vector3 origemNavMesh) || !TentarProjetarNoNavMesh(destino, out Vector3 destinoNavMesh))
+        {
+            return false;
+        }
+
+        NavMeshPath caminhoCalculado = new NavMeshPath();
+        if (!NavMesh.CalculatePath(origemNavMesh, destinoNavMesh, NavMesh.AllAreas, caminhoCalculado))
+        {
+            return false;
+        }
+
+        return caminhoCalculado.status == NavMeshPathStatus.PathComplete;
+    }
+
+    bool TentarDesviarNpc(Vector3 posicaoAtual, Vector3 movimentoDesejado, Vector3 direcaoAlvo, out Vector3 novaPosicao)
+    {
+        novaPosicao = posicaoAtual;
+
+        float distancia = movimentoDesejado.magnitude;
+        if (distancia <= 0.0001f)
+        {
+            return false;
+        }
+
+        Vector3 direcaoBase = movimentoDesejado.normalized;
+        Vector3 direcaoAlvoNormalizada = direcaoAlvo.sqrMagnitude > 0.0001f ? direcaoAlvo.normalized : direcaoBase;
+        float[] angulosTentativa = { 30f, -30f, 55f, -55f };
+
+        for (int i = 0; i < angulosTentativa.Length; i++)
+        {
+            Vector3 direcaoDesvio = Quaternion.AngleAxis(angulosTentativa[i], Vector3.up) * direcaoBase;
+            if (Vector3.Dot(direcaoDesvio, direcaoAlvoNormalizada) <= -0.1f)
+            {
+                continue;
+            }
+
+            Vector3 movimentoDesvio = direcaoDesvio * distancia;
+            if (MovimentoNpcEstaLivre(posicaoAtual, movimentoDesvio))
+            {
+                // Quando o caminho direto estiver bloqueado, tenta um pequeno desvio lateral.
+                novaPosicao = posicaoAtual + movimentoDesvio;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     void AoChegarNoCaixa()
     {
-        // Quando o NPC chega ao caixa, cria o produto dele no ponto de spawn.
+        // Quando o cliente chega ao caixa, o item sorteado aparece no checkout.
         produtoAtual = SpawnarProdutoAtual();
 
         if (produtoAtual == null)
         {
-            scanner.MostrarTextoInfoProduto("Cliente chegou, mas nao havia produto configurado.", 2f);
+            scanner.MostrarTextoInfoProduto("Cliente chegou ao caixa, mas nenhum produto foi encontrado.", 2f);
             indiceWaypointSaidaAtual = 0;
             estadoAtual = EstadoCliente.IndoEmbora;
             return;
         }
 
+        // Mostra os dados do item e pede o escaneamento.
         scanner.MostrarTextoInfoProduto(
             "Cliente no caixa.\n\n" +
             produtoAtual.ObterMensagemEscaneamento() +
             "\n\nEscaneie o produto para continuar.",
             0f
         );
+    }
+
+    void AoChegarNoProduto()
+    {
+        if (produtoDestinoAtual != null)
+        {
+            // Quando o NPC chega ao produto visual da loja, ele some da prateleira.
+            produtoDestinoAtual.EsconderProdutoVisualDaLoja();
+        }
+
+        // Ao terminar a busca pelo produto, o cliente segue a segunda metade da rota ate o caixa.
+        indiceWaypointEntradaAtual = 0;
     }
 
     void AoProdutoEscaneado(Pickup pickup)
@@ -393,16 +928,10 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
-        // Calcula total, pagamento e troco assim que o item correto e lido.
+        // Assim que o item correto passa no scanner, calcula total, pagamento e troco.
         totalCompra = pickup.ObterPrecoProduto();
         valorPago = SortearValorPago(totalCompra);
         troco = Mathf.Max(0f, valorPago - totalCompra);
-
-        if (produtoDaPrateleiraAtual != null)
-        {
-            // Libera o espaco vazio da prateleira para aceitar reposicao vinda do estoque.
-            produtoDaPrateleiraAtual.LiberarDepoisDoAtendimento();
-        }
 
         estadoAtual = EstadoCliente.AguardandoTroco;
         produtoAtual = null;
@@ -421,7 +950,7 @@ public class SistemaCaixa : MonoBehaviour
     {
         if (goalManager != null)
         {
-            // Conta o cliente como atendido e mostra confirmacao na tela.
+            // Conta o cliente como atendido e informa o valor entregue.
             goalManager.ClienteAtendido();
             goalManager.MostrarMensagem("Troco entregue: R$ " + FormatarDinheiro(troco), 3f);
         }
@@ -438,7 +967,7 @@ public class SistemaCaixa : MonoBehaviour
     {
         if (npcAtual != null)
         {
-            // Remove o NPC da cena quando ele chega ao ponto de saida.
+            // Remove o clone do cliente quando ele chega ao fim da rota de saida.
             Destroy(npcAtual);
             npcAtual = null;
         }
@@ -446,302 +975,89 @@ public class SistemaCaixa : MonoBehaviour
         estadoAtual = EstadoCliente.AguardandoProximoCliente;
     }
 
-    void MoverNpcPeloCaminho(List<Transform> caminhoAtual, ref int indiceWaypointAtual, Vector3 destinoFinal, EstadoCliente proximoEstado, System.Action aoChegar)
+    void ProcessarDigitacaoTroco()
     {
-        if (npcAtual == null)
+        bool houveMudanca = false;
+
+        // Le cada caractere digitado pelo jogador neste frame.
+        foreach (char caractere in Input.inputString)
         {
-            estadoAtual = EstadoCliente.AguardandoProximoCliente;
-            return;
-        }
-
-        // Ignora referencias vazias para nao travar o NPC se algum ponto for apagado.
-        while (indiceWaypointAtual < caminhoAtual.Count && caminhoAtual[indiceWaypointAtual] == null)
-        {
-            indiceWaypointAtual++;
-        }
-
-        bool seguindoWaypoint = indiceWaypointAtual < caminhoAtual.Count;
-        Vector3 destino = seguindoWaypoint ? caminhoAtual[indiceWaypointAtual].position : destinoFinal;
-
-        if (!MoverNpcAte(destino))
-        {
-            return;
-        }
-
-        if (seguindoWaypoint)
-        {
-            // Quando chega em um ponto, passa para o proximo antes de mirar o destino final.
-            indiceWaypointAtual++;
-            return;
-        }
-
-        estadoAtual = proximoEstado;
-        aoChegar?.Invoke();
-    }
-
-    bool MoverNpcAte(Vector3 destino)
-    {
-        return MoverNpcAte(destino, distanciaChegadaWaypoint);
-    }
-
-    bool MoverNpcAte(Vector3 destino, float distanciaChegada)
-    {
-        // O NPC usa apenas o pathfinding fisico por colisao para manter um comportamento unico.
-        return MoverNpcComPathfindingFisico(destino, distanciaChegada);
-    }
-
-    bool MoverNpcDiretoPara(Vector3 destino, float distanciaChegada)
-    {
-        // Este movimento direto so e usado entre pontos ja aprovados pelo pathfinding fisico.
-        Vector3 posicaoAtual = npcAtual.transform.position;
-        Vector3 destinoPlano = new Vector3(destino.x, posicaoAtual.y, destino.z);
-        Vector3 direcao = destinoPlano - posicaoAtual;
-        direcao.y = 0f;
-
-        if (direcao.sqrMagnitude <= distanciaChegada * distanciaChegada)
-        {
-            npcAtual.transform.position = destinoPlano;
-            return true;
-        }
-
-        npcAtual.transform.position = Vector3.MoveTowards(posicaoAtual, destinoPlano, velocidadeNpc * Time.deltaTime);
-
-        if (direcao.sqrMagnitude > 0.0001f)
-        {
-            // Mantem a rotacao apenas no plano horizontal para evitar movimento torto.
-            npcAtual.transform.rotation = Quaternion.LookRotation(direcao.normalized, Vector3.up);
-        }
-
-        return false;
-    }
-
-    bool MoverNpcComPathfindingFisico(Vector3 destino, float distanciaChegada)
-    {
-        // Metodo principal de movimento do cliente: recebe um destino e segue um caminho aprovado por colisao.
-        if (npcAtual == null)
-        {
-            return false;
-        }
-
-        // Mantem o destino no mesmo Y do NPC para evitar que altura de prateleira puxe o personagem para cima/baixo.
-        Vector3 posicaoAtual = npcAtual.transform.position;
-        Vector3 destinoPlano = new Vector3(destino.x, posicaoAtual.y, destino.z);
-
-        // Se ja chegou perto o suficiente, encerra o caminho atual.
-        if (Vector3.Distance(posicaoAtual, destinoPlano) <= distanciaChegada)
-        {
-            npcAtual.transform.position = destinoPlano;
-            return true;
-        }
-
-        // O desvio fisico testa poucos passos por frame, evitando travar o jogo com busca em grade.
-        TentarAndarComDesvio(destinoPlano);
-        return false;
-    }
-
-    void TentarAndarComDesvio(Vector3 destino)
-    {
-        Vector3 posicaoAtual = npcAtual.transform.position;
-        Vector3 direcaoPrincipal = destino - posicaoAtual;
-        direcaoPrincipal.y = 0f;
-
-        if (direcaoPrincipal.sqrMagnitude < 0.0001f)
-        {
-            return;
-        }
-
-        direcaoPrincipal.Normalize();
-
-        // Primeiro tenta andar reto; se tiver parede, tenta pequenas aberturas laterais.
-        float[] angulos = { 0f, 25f, -25f, 50f, -50f, 80f, -80f, 120f, -120f, 180f };
-        for (int i = 0; i < angulos.Length; i++)
-        {
-            Vector3 direcaoTeste = Quaternion.Euler(0f, angulos[i], 0f) * direcaoPrincipal;
-            if (TentarMoverPassoFisico(direcaoTeste))
+            if (char.IsDigit(caractere))
             {
+                if (trocoDigitadoEmCentavos.Length < maximoDigitosTroco)
+                {
+                    trocoDigitadoEmCentavos += caractere;
+                    avisoTrocoAtual = string.Empty;
+                    houveMudanca = true;
+                }
+            }
+            else if (caractere == '\b')
+            {
+                if (trocoDigitadoEmCentavos.Length > 0)
+                {
+                    trocoDigitadoEmCentavos = trocoDigitadoEmCentavos.Substring(0, trocoDigitadoEmCentavos.Length - 1);
+                    avisoTrocoAtual = string.Empty;
+                    houveMudanca = true;
+                }
+            }
+            else if (caractere == '\r' || caractere == '\n')
+            {
+                ConfirmarTrocoDigitado();
                 return;
             }
         }
+
+        if (houveMudanca)
+        {
+            AtualizarTextoTroco();
+        }
     }
 
-    bool TentarMoverPassoFisico(Vector3 direcao)
+    void ConfirmarTrocoDigitado()
     {
-        // Move apenas um passo pequeno ja validado contra os colliders reais da loja.
-        Vector3 posicaoAtual = npcAtual.transform.position;
-        Vector3 proximaPosicao = posicaoAtual + direcao.normalized * velocidadeNpc * Time.deltaTime;
-
-        if (!PosicaoLivreParaNpc(proximaPosicao))
+        if (!JogadorPertoDoScanner())
         {
-            return false;
+            // Impede confirmar troco de longe para manter a logica do caixa coerente.
+            avisoTrocoAtual = "Chegue mais perto do caixa para confirmar o troco.";
+            AtualizarTextoTroco();
+            return;
         }
 
-        if (TemParedeEntrePontos(posicaoAtual, proximaPosicao))
+        float valorDigitado = ObterValorTrocoDigitado();
+        if (Mathf.Abs(valorDigitado - troco) <= 0.009f)
         {
-            return false;
+            EntregarTroco();
+            return;
         }
 
-        npcAtual.transform.position = proximaPosicao;
-        npcAtual.transform.rotation = Quaternion.LookRotation(direcao.normalized, Vector3.up);
-        return true;
+        // Limpa a digitacao quando o troco estiver errado e pede uma nova tentativa.
+        trocoDigitadoEmCentavos = string.Empty;
+        avisoTrocoAtual = "Troco incorreto. Digite novamente.";
+        AtualizarTextoTroco();
     }
 
-    bool PosicaoLivreParaNpc(Vector3 posicao)
+    void AtualizarTextoTroco()
     {
-        // Primeiro confirma que existe piso abaixo desse ponto.
-        if (!TemChaoAbaixo(posicao))
+        if (scanner == null)
         {
-            return false;
+            return;
         }
 
-        // Depois checa volumes horizontais do corpo; isso evita confundir o chao com parede.
-        Vector3 pontoBaixo = posicao + Vector3.up * 0.45f;
-        Vector3 pontoAlto = posicao + Vector3.up * Mathf.Max(0.9f, alturaAgenteNpc * 0.75f);
+        // Monta a mensagem completa mostrada no Canvas durante a digitacao do troco.
+        string textoTroco =
+            mensagemTrocoAtual +
+            "\nTroco digitado: R$ " + FormatarTrocoDigitado();
 
-        if (ExisteParedeNoPonto(pontoBaixo) || ExisteParedeNoPonto(pontoAlto))
+        if (!string.IsNullOrWhiteSpace(avisoTrocoAtual))
         {
-            return false;
+            textoTroco += "\n" + avisoTrocoAtual;
         }
 
-        return true;
-    }
-
-    bool ExisteParedeNoPonto(Vector3 pontoCorpo)
-    {
-        // Usa uma esfera na altura do corpo para detectar paredes/prateleiras sem encostar no chao.
-        Collider[] colisoes = Physics.OverlapSphere(pontoCorpo, raioAgenteNpc, ~0, QueryTriggerInteraction.Ignore);
-
-        for (int i = 0; i < colisoes.Length; i++)
-        {
-            Collider colisao = colisoes[i];
-            if (!ColliderBloqueiaNpc(colisao))
-            {
-                continue;
-            }
-
-            return true;
-        }
-
-        return false;
-    }
-
-    bool TemParedeEntrePontos(Vector3 origem, Vector3 destino)
-    {
-        // CapsuleCast bloqueia o passo quando a "capsula do corpo" bateria em parede do modelo da loja.
-        Vector3 deslocamento = destino - origem;
-        deslocamento.y = 0f;
-        float distancia = deslocamento.magnitude;
-
-        if (distancia <= 0.0001f)
-        {
-            return false;
-        }
-
-        Vector3 direcao = deslocamento / distancia;
-        Vector3 baseCapsula = origem + Vector3.up * 0.35f;
-        Vector3 topoCapsula = origem + Vector3.up * Mathf.Max(0.7f, alturaAgenteNpc - 0.15f);
-        RaycastHit[] impactos = Physics.CapsuleCastAll(baseCapsula, topoCapsula, raioAgenteNpc, direcao, distancia, ~0, QueryTriggerInteraction.Ignore);
-
-        for (int i = 0; i < impactos.Length; i++)
-        {
-            RaycastHit impacto = impactos[i];
-            if (!ColliderBloqueiaNpc(impacto.collider))
-            {
-                continue;
-            }
-
-            if (impacto.normal.y > 0.55f)
-            {
-                // Normal apontando para cima e piso/rampa, nao parede.
-                continue;
-            }
-
-            return true;
-        }
-
-        return false;
-    }
-
-    bool ColliderBloqueiaNpc(Collider colisao)
-    {
-        if (colisao == null)
-        {
-            return false;
-        }
-
-        if (npcAtual != null && colisao.transform.IsChildOf(npcAtual.transform))
-        {
-            return false;
-        }
-
-        if (colisao.isTrigger)
-        {
-            return false;
-        }
-
-        if (colisao.GetComponentInParent<Pickup>() != null)
-        {
-            // Produtos pequenos nao bloqueiam rota de cliente.
-            return false;
-        }
-
-        return true;
-    }
-
-    bool TemChaoAbaixo(Vector3 posicao)
-    {
-        // Raycast vertical: se algo solido esta logo abaixo do pe, a celula e pisavel.
-        RaycastHit[] impactos = Physics.RaycastAll(posicao + Vector3.up * 2f, Vector3.down, 5f, ~0, QueryTriggerInteraction.Ignore);
-        for (int i = 0; i < impactos.Length; i++)
-        {
-            Collider colisao = impactos[i].collider;
-            if (colisao == null)
-            {
-                continue;
-            }
-
-            if (npcAtual != null && colisao.transform.IsChildOf(npcAtual.transform))
-            {
-                continue;
-            }
-
-            if (colisao.GetComponentInParent<Pickup>() != null)
-            {
-                continue;
-            }
-
-            // Considera chao apenas quando a superficie esta abaixo do pe do NPC.
-            if (impactos[i].point.y <= posicao.y + 0.25f)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    bool SegmentoLivreParaNpc(Vector3 origem, Vector3 destino)
-    {
-        // Mantido como leitura simples para outros trechos: livre significa sem parede no caminho.
-        return !TemParedeEntrePontos(origem, destino) && PosicaoLivreParaNpc(destino);
+        scanner.MostrarTextoInfoProduto(textoTroco, 0f);
     }
 
     void PrepararPontosDaCena()
     {
-        if (spawnNPC == null)
-        {
-            spawnNPC = ObterPrimeiroTransformValido(caminhoEntrada);
-        }
-
-        if (despawnNPC == null)
-        {
-            despawnNPC = ObterUltimoTransformValido(caminhoSaida);
-        }
-
-        if (spawnProduto == null)
-        {
-            spawnProduto = ObterPrimeiroTransformValido(pontosSpawn);
-        }
-
         if (spawnNPC == null)
         {
             GameObject spawnNpcObject = GameObject.Find("SpawnNPC");
@@ -768,209 +1084,292 @@ public class SistemaCaixa : MonoBehaviour
                 spawnProduto = spawnProdutoObject.transform;
             }
         }
-    }
 
-    void PrepararColisaoDaLoja()
-    {
-        AutoShopCollision colisaoLoja = Object.FindFirstObjectByType<AutoShopCollision>();
-        if (colisaoLoja == null)
+        if (pontoParadaCaixa == null)
         {
-            GameObject alvo = storeModel != null ? storeModel.gameObject : GameObject.Find("StoreModel");
-            if (alvo == null)
+            GameObject pontoParadaObject = GameObject.Find("ScannerNPC");
+            if (pontoParadaObject != null)
             {
-                alvo = GameObject.Find("shop");
+                pontoParadaCaixa = pontoParadaObject.transform;
             }
-
-            if (alvo == null)
-            {
-                Debug.LogWarning("SistemaCaixa nao encontrou StoreModel/shop para preparar colisoes da loja.", this);
-                return;
-            }
-
-            // Adiciona o preparador automaticamente para nao depender de configuracao manual.
-            colisaoLoja = alvo.AddComponent<AutoShopCollision>();
         }
 
-        colisaoLoja.PrepararColisoesDaLoja();
+        if (raizProdutosInteragiveis == null)
+        {
+            GameObject interactablesObject = GameObject.Find("Interactables");
+            if (interactablesObject != null)
+            {
+                raizProdutosInteragiveis = interactablesObject.transform;
+            }
+        }
+
+        if (raizProdutosVisuaisLoja == null)
+        {
+            GameObject visuaisLojaObject = GameObject.Find("ProdutosVisuaisLoja");
+            if (visuaisLojaObject != null)
+            {
+                raizProdutosVisuaisLoja = visuaisLojaObject.transform;
+            }
+        }
+
+        if (raizProdutosAtendimentoNpc == null && raizProdutosVisuaisLoja != null)
+        {
+            // Por padrao, o mesmo grupo de produtos visuais tambem vira a area de atendimento do NPC.
+            raizProdutosAtendimentoNpc = raizProdutosVisuaisLoja;
+        }
+
+        if (raizAreaNavMesh == null)
+        {
+            GameObject lojaObject = GameObject.Find("shop");
+            if (lojaObject != null)
+            {
+                // Usa a raiz da loja como limite padrao da navegacao.
+                raizAreaNavMesh = lojaObject.transform;
+            }
+        }
     }
 
-    bool TentarCalcularPontoAproximacaoProduto(Transform produto, out Vector3 pontoAproximacao)
+    void PrepararNavMeshDaLoja()
     {
-        pontoAproximacao = Vector3.zero;
-        if (produto == null)
+        navMeshPronto = false;
+
+        if (!usarNavMesh)
+        {
+            return;
+        }
+
+        if (superficieNavMesh == null)
+        {
+            superficieNavMesh = GetComponent<NavMeshSurface>();
+        }
+
+        if (superficieNavMesh == null)
+        {
+            // Tambem aceita uma NavMeshSurface colocada em qualquer outro objeto da cena.
+            superficieNavMesh = Object.FindFirstObjectByType<NavMeshSurface>();
+        }
+
+        if (superficieNavMesh == null && construirNavMeshEmRuntime)
+        {
+            // Cria a superficie no proprio controlador para nao exigir configuracao manual extra.
+            superficieNavMesh = gameObject.AddComponent<NavMeshSurface>();
+        }
+
+        if (superficieNavMesh == null)
+        {
+            Debug.LogWarning("SistemaCaixa nao encontrou NavMeshSurface. Adicione uma na cena e use Bake para o NPC andar pelo mercado.", this);
+            return;
+        }
+
+        ConfigurarSuperficieNavMesh();
+
+        if (construirNavMeshEmRuntime)
+        {
+            // Runtime bake e opcional porque meshes importadas sem Read/Write costumam gerar erro no Play.
+            superficieNavMesh.BuildNavMesh();
+        }
+        else if (superficieNavMesh.navMeshData == null)
+        {
+            Debug.LogWarning("SistemaCaixa encontrou a NavMeshSurface, mas ela ainda nao foi assada. Selecione a superficie e clique em Bake antes de dar Play.", superficieNavMesh);
+        }
+
+        Vector3 pontoReferencia = spawnNPC != null ? spawnNPC.position : transform.position;
+        navMeshPronto = TentarProjetarNoNavMesh(pontoReferencia, out _);
+
+        if (!navMeshPronto)
+        {
+            Debug.LogWarning("SistemaCaixa nao encontrou uma NavMesh valida perto do ponto de spawn. Confira se o chao entrou no Bake.", this);
+        }
+    }
+
+    void ConfigurarSuperficieNavMesh()
+    {
+        if (superficieNavMesh == null)
+        {
+            return;
+        }
+
+        // A superficie usa as colisoes reais da loja para montar a area navegavel do NPC.
+        superficieNavMesh.agentTypeID = ObterAgentTypeNavMeshPadrao();
+        superficieNavMesh.useGeometry = NavMeshCollectGeometry.PhysicsColliders;
+        superficieNavMesh.layerMask = mascaraColisaoNpc;
+        superficieNavMesh.ignoreNavMeshAgent = true;
+        superficieNavMesh.ignoreNavMeshObstacle = false;
+        superficieNavMesh.overrideVoxelSize = true;
+        superficieNavMesh.voxelSize = Mathf.Max(0.05f, raioColisaoNpc * 0.5f);
+        superficieNavMesh.overrideTileSize = true;
+        superficieNavMesh.tileSize = 128;
+
+        if (limitarNavMeshAoMercado && TentarCalcularBoundsAreaNavMesh(out Bounds boundsMercado))
+        {
+            // Usa apenas um volume do mercado para impedir que a malha pegue a area de fora.
+            superficieNavMesh.collectObjects = CollectObjects.Volume;
+            superficieNavMesh.center = superficieNavMesh.transform.InverseTransformPoint(boundsMercado.center);
+            superficieNavMesh.size = SomarMargemAoBounds(boundsMercado.size);
+            return;
+        }
+
+        // Fallback para pegar a cena toda quando nao existir uma raiz valida da loja.
+        superficieNavMesh.collectObjects = CollectObjects.All;
+    }
+
+    bool TentarCalcularBoundsAreaNavMesh(out Bounds boundsMercado)
+    {
+        boundsMercado = new Bounds();
+
+        if (raizAreaNavMesh == null)
         {
             return false;
         }
 
-        // Calcula um ponto ao redor do produto, mas so aceita se houver caminho fisico ate ele.
-        Bounds bounds = ObterBoundsProduto(produto);
-        Vector3 centro = bounds.center;
-        Vector3 origem = npcAtual != null ? npcAtual.transform.position : spawnNPC.position;
-        Vector3 direcaoBase = centro - origem;
-        direcaoBase.y = 0f;
+        Collider[] collidersLoja = raizAreaNavMesh.GetComponentsInChildren<Collider>(true);
+        bool possuiBounds = false;
 
-        if (direcaoBase.sqrMagnitude < 0.01f)
+        for (int i = 0; i < collidersLoja.Length; i++)
         {
-            direcaoBase = Vector3.forward;
+            Collider colliderAtual = collidersLoja[i];
+            if (colliderAtual == null)
+            {
+                continue;
+            }
+
+            if (!possuiBounds)
+            {
+                boundsMercado = colliderAtual.bounds;
+                possuiBounds = true;
+            }
+            else
+            {
+                boundsMercado.Encapsulate(colliderAtual.bounds);
+            }
         }
 
-        direcaoBase.Normalize();
-
-        float raioProduto = Mathf.Max(bounds.extents.x, bounds.extents.z);
-        float distancia = raioProduto + distanciaAproximacaoProduto;
-        Vector3 melhorPonto = centro - direcaoBase * distancia;
-        melhorPonto.y = npcAtual != null ? npcAtual.transform.position.y : spawnNPC.position.y;
-
-        if (TentarObterPontoComCaminho(melhorPonto, out pontoAproximacao))
+        if (possuiBounds)
         {
             return true;
         }
 
-        // Testa pontos em volta do produto para achar um corredor navegavel perto da prateleira.
-        for (int i = 0; i < 16; i++)
+        Renderer[] renderersLoja = raizAreaNavMesh.GetComponentsInChildren<Renderer>(true);
+        for (int i = 0; i < renderersLoja.Length; i++)
         {
-            float angulo = (360f / 16f) * i;
-            Vector3 direcao = Quaternion.Euler(0f, angulo, 0f) * Vector3.forward;
-            Vector3 candidato = centro + direcao * distancia;
-            candidato.y = npcAtual != null ? npcAtual.transform.position.y : spawnNPC.position.y;
-
-            if (TentarObterPontoComCaminho(candidato, out pontoAproximacao))
+            Renderer rendererAtual = renderersLoja[i];
+            if (rendererAtual == null)
             {
-                return true;
+                continue;
             }
+
+            if (!possuiBounds)
+            {
+                boundsMercado = rendererAtual.bounds;
+                possuiBounds = true;
+            }
+            else
+            {
+                boundsMercado.Encapsulate(rendererAtual.bounds);
+            }
+        }
+
+        return possuiBounds;
+    }
+
+    Vector3 SomarMargemAoBounds(Vector3 tamanhoOriginal)
+    {
+        // Expande o volume so um pouco para nao cortar a entrada e os corredores por detalhe.
+        return new Vector3(
+            Mathf.Max(0.5f, tamanhoOriginal.x + margemAreaNavMesh.x),
+            Mathf.Max(0.5f, tamanhoOriginal.y + margemAreaNavMesh.y),
+            Mathf.Max(0.5f, tamanhoOriginal.z + margemAreaNavMesh.z)
+        );
+    }
+
+    int ObterAgentTypeNavMeshPadrao()
+    {
+        int quantidadeConfiguracoes = NavMesh.GetSettingsCount();
+        if (quantidadeConfiguracoes > 0)
+        {
+            // Usa o primeiro agent type cadastrado no projeto para manter compatibilidade com a cena.
+            return NavMesh.GetSettingsByIndex(0).agentTypeID;
+        }
+
+        return 0;
+    }
+
+    void ConfigurarAgenteNpc(GameObject npcClonado)
+    {
+        agenteNpcAtual = null;
+        destinoNavMeshDefinido = false;
+        ultimoDestinoNavMesh = Vector3.zero;
+
+        if (!usarNavMesh || !navMeshPronto || npcClonado == null)
+        {
+            return;
+        }
+
+        agenteNpcAtual = npcClonado.GetComponent<NavMeshAgent>();
+        if (agenteNpcAtual == null)
+        {
+            // O agent fica so no clone de runtime para nao poluir o objeto-base da cena.
+            agenteNpcAtual = npcClonado.AddComponent<NavMeshAgent>();
+        }
+
+        agenteNpcAtual.enabled = false;
+        agenteNpcAtual.radius = Mathf.Max(0.05f, raioColisaoNpc);
+        agenteNpcAtual.height = Mathf.Max((raioColisaoNpc * 2f) + 0.05f, alturaColisaoNpc);
+        agenteNpcAtual.speed = velocidadeNpc;
+        agenteNpcAtual.acceleration = aceleracaoNavMesh;
+        agenteNpcAtual.angularSpeed = velocidadeAngularNavMesh;
+        agenteNpcAtual.stoppingDistance = Mathf.Max(distanciaChegadaNavMesh, distanciaChegadaWaypoint);
+        agenteNpcAtual.autoBraking = true;
+        agenteNpcAtual.autoRepath = true;
+        agenteNpcAtual.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
+        agenteNpcAtual.avoidancePriority = 50;
+        agenteNpcAtual.updatePosition = true;
+        agenteNpcAtual.updateRotation = true;
+
+        if (!TentarProjetarNoNavMesh(npcClonado.transform.position, out Vector3 posicaoNavMesh))
+        {
+            Debug.LogWarning("SistemaCaixa nao conseguiu encaixar o NPC no NavMesh. O clone vai usar o fallback antigo.", npcClonado);
+            agenteNpcAtual = null;
+            return;
+        }
+
+        agenteNpcAtual.enabled = true;
+        agenteNpcAtual.Warp(posicaoNavMesh);
+        npcClonado.transform.position = posicaoNavMesh;
+    }
+
+    bool TentarProjetarNoNavMesh(Vector3 posicaoDesejada, out Vector3 posicaoNavMesh)
+    {
+        posicaoNavMesh = posicaoDesejada;
+
+        if (!usarNavMesh)
+        {
+            return false;
+        }
+
+        if (NavMesh.SamplePosition(posicaoDesejada, out NavMeshHit hitNavMesh, raioAmostraNavMesh, NavMesh.AllAreas))
+        {
+            // Usa o ponto valido mais proximo da malha para o NPC nao nascer congelado fora dela.
+            posicaoNavMesh = hitNavMesh.position;
+            return true;
         }
 
         return false;
     }
 
-    Bounds ObterBoundsProduto(Transform produto)
-    {
-        Renderer[] renderers = produto.GetComponentsInChildren<Renderer>(true);
-        if (renderers.Length == 0)
-        {
-            return new Bounds(produto.position, Vector3.one);
-        }
-
-        Bounds bounds = renderers[0].bounds;
-        for (int i = 1; i < renderers.Length; i++)
-        {
-            bounds.Encapsulate(renderers[i].bounds);
-        }
-
-        return bounds;
-    }
-
-    bool TentarObterPontoComCaminho(Vector3 candidato, out Vector3 pontoNavegavel)
-    {
-        pontoNavegavel = candidato;
-        if (npcAtual == null)
-        {
-            return PosicaoLivreParaNpc(candidato);
-        }
-
-        // No sistema leve, o ponto precisa estar livre; o desvio por frame cuida do caminho ate ele.
-        return PosicaoLivreParaNpc(candidato);
-    }
-
-    void PrepararInteractables()
-    {
-        if (interactables != null)
-        {
-            return;
-        }
-
-        // Procura a aba/objeto Interactables automaticamente para pegar produtos da prateleira.
-        GameObject interactablesObject = GameObject.Find("Interactables");
-        if (interactablesObject != null)
-        {
-            interactables = interactablesObject.transform;
-        }
-    }
-
-    void PrepararStoreModel()
-    {
-        if (storeModel != null)
-        {
-            return;
-        }
-
-        // Procura o StoreModel automaticamente para achar os itens de estoque.
-        GameObject storeModelObject = GameObject.Find("StoreModel");
-        if (storeModelObject != null)
-        {
-            storeModel = storeModelObject.transform;
-        }
-    }
-
-    void PrepararProdutosDaPrateleira()
-    {
-        if (interactables == null)
-        {
-            return;
-        }
-
-        Pickup[] pickups = interactables.GetComponentsInChildren<Pickup>(true);
-        for (int i = 0; i < pickups.Length; i++)
-        {
-            Pickup pickup = pickups[i];
-            Transform raizProduto = ObterRaizProdutoDentroDeInteractables(pickup);
-            pickup.ConfigurarComoProdutoDePrateleira(raizProduto);
-        }
-    }
-
-    void PrepararProdutosDoEstoque()
-    {
-        if (storeModel == null)
-        {
-            return;
-        }
-
-        Pickup[] pickups = storeModel.GetComponentsInChildren<Pickup>(true);
-        for (int i = 0; i < pickups.Length; i++)
-        {
-            Pickup pickup = pickups[i];
-            if (ProdutoPertenceAInteractables(pickup))
-            {
-                continue;
-            }
-
-            Transform raizProduto = ObterRaizProdutoDentroDoEstoque(pickup);
-            pickup.ConfigurarComoProdutoDeEstoque(raizProduto);
-        }
-    }
-
     void PrepararConfiguracoesClientes()
     {
-        if (configuracoesClientes == null)
+        if (configuracoesClientes == null || configuracoesClientes.Length == 0)
         {
-            return;
+            configuracoesClientes = new ConfiguracaoClienteCaixa[8];
         }
 
         for (int i = 0; i < configuracoesClientes.Length; i++)
         {
-            ConfiguracaoClienteCaixa configuracao = configuracoesClientes[i];
-            if (configuracao == null)
+            if (configuracoesClientes[i] == null)
             {
-                continue;
-            }
-
-            if (configuracao.npc != null && configuracao.npc.scene.IsValid())
-            {
-                NPCInteraction interacao = configuracao.npc.GetComponent<NPCInteraction>();
-                if (interacao != null)
-                {
-                    // Desliga a interacao manual no modelo-base do NPC.
-                    interacao.enabled = false;
-                }
-
-                // Mantem o modelo-base do NPC escondido quando ele for um objeto da cena.
-                configuracao.npc.SetActive(false);
-            }
-
-            if (configuracao.produto != null && configuracao.produto.gameObject.scene.IsValid())
-            {
-                // Mantem o produto-base escondido quando ele for um objeto da cena.
-                configuracao.produto.gameObject.SetActive(false);
+                // Cria slots vazios para o Inspector e o runtime manterem o mesmo formato.
+                configuracoesClientes[i] = new ConfiguracaoClienteCaixa();
             }
         }
     }
@@ -978,11 +1377,6 @@ public class SistemaCaixa : MonoBehaviour
     void PrepararIndicesConfiguracoesValidas()
     {
         indicesConfiguracoesValidas.Clear();
-
-        if (configuracoesClientes == null)
-        {
-            return;
-        }
 
         for (int i = 0; i < configuracoesClientes.Length; i++)
         {
@@ -997,56 +1391,189 @@ public class SistemaCaixa : MonoBehaviour
                 continue;
             }
 
-            // Guarda apenas as configuracoes que tem NPC e produto prontos.
+            // So entra no sorteio quem tem pelo menos NPC e produto.
             indicesConfiguracoesValidas.Add(i);
         }
     }
 
     bool TentarEscolherConfiguracaoCliente()
     {
-        PrepararIndicesConfiguracoesValidas();
-        configuracaoAtual = null;
-
         if (indicesConfiguracoesValidas.Count == 0)
         {
             return false;
         }
 
-        int indiceListaEscolhido = Random.Range(0, indicesConfiguracoesValidas.Count);
+        int indiceConfiguracao = indicesConfiguracoesValidas[Random.Range(0, indicesConfiguracoesValidas.Count)];
 
         if (evitarRepetirNpcEmSequencia && indicesConfiguracoesValidas.Count > 1)
         {
-            // Tenta evitar repetir a mesma variacao duas vezes seguidas.
             int tentativas = 0;
-            while (indicesConfiguracoesValidas[indiceListaEscolhido] == ultimoIndiceConfiguracao && tentativas < 10)
+            while (indiceConfiguracao == ultimoIndiceConfiguracao && tentativas < 10)
             {
-                indiceListaEscolhido = Random.Range(0, indicesConfiguracoesValidas.Count);
+                indiceConfiguracao = indicesConfiguracoesValidas[Random.Range(0, indicesConfiguracoesValidas.Count)];
                 tentativas++;
             }
         }
 
-        ultimoIndiceConfiguracao = indicesConfiguracoesValidas[indiceListaEscolhido];
-        configuracaoAtual = configuracoesClientes[ultimoIndiceConfiguracao];
+        ultimoIndiceConfiguracao = indiceConfiguracao;
+        configuracaoAtual = configuracoesClientes[indiceConfiguracao];
         return configuracaoAtual != null;
     }
 
-    void PrepararCaminhoOrdenado(Transform[] caminhoBase, List<Transform> caminhoAtual)
+    void PrepararRotaEntradaAtual(ConfiguracaoClienteCaixa configuracao)
     {
-        caminhoAtual.Clear();
+        caminhoEntradaAtual.Clear();
 
-        if (caminhoBase == null || caminhoBase.Length == 0)
+        if (configuracao != null && TentarCopiarPontosOrdenados(configuracao.caminhoEntrada, caminhoEntradaAtual))
         {
             return;
         }
 
-        for (int i = 0; i < caminhoBase.Length; i++)
+        if (TentarUsarRotaAleatoria(rotasEntradaAleatorias, caminhoEntradaAtual, ref ultimoIndiceRotaEntrada))
         {
-            if (caminhoBase[i] != null)
+            return;
+        }
+
+        PrepararCaminhoAtual(caminhoEntrada, caminhoEntradaAtual, sortearCaminhoEntrada);
+    }
+
+    void PrepararRotaSaidaAtual(ConfiguracaoClienteCaixa configuracao)
+    {
+        caminhoSaidaAtual.Clear();
+
+        if (configuracao != null && TentarCopiarPontosOrdenados(configuracao.caminhoSaida, caminhoSaidaAtual))
+        {
+            return;
+        }
+
+        if (TentarUsarRotaAleatoria(rotasSaidaAleatorias, caminhoSaidaAtual, ref ultimoIndiceRotaSaida))
+        {
+            return;
+        }
+
+        PrepararCaminhoAtual(caminhoSaida, caminhoSaidaAtual, sortearCaminhoSaida);
+    }
+
+    bool TentarPrepararCaminhosAutomaticosParaProduto()
+    {
+        caminhoProdutoAtual.Clear();
+        caminhoEntradaAtual.Clear();
+        produtoDestinoAtual = ObterProdutoDaLojaCorrespondente(modeloProdutoAtual);
+        possuiPosicaoParadaProdutoAtual = false;
+
+        if (produtoDestinoAtual == null || pontoParadaCaixa == null)
+        {
+            return false;
+        }
+
+        Transform pontoSpawn = ObterPontoSpawnCliente();
+        if (pontoSpawn == null)
+        {
+            return false;
+        }
+
+        // Monta um trecho automatico do spawn ate o produto escolhido.
+        bool trechoAteProdutoValido = TentarConstruirCaminhoAutomatico(
+            pontoSpawn.position,
+            produtoDestinoAtual.transform.position,
+            caminhoProdutoAtual,
+            minimoPontosAteProduto,
+            maximoPontosAteProduto
+        );
+
+        Vector3 referenciaAproximacao = caminhoProdutoAtual.Count > 0
+            ? caminhoProdutoAtual[caminhoProdutoAtual.Count - 1].position
+            : pontoSpawn.position;
+
+        posicaoParadaProdutoAtual = CalcularPontoParadaNoProduto(produtoDestinoAtual, referenciaAproximacao);
+        possuiPosicaoParadaProdutoAtual = true;
+
+        // Monta o segundo trecho do produto ate o caixa usando o mesmo pool de pontos.
+        bool trechoAteCaixaValido = TentarConstruirCaminhoAutomatico(
+            posicaoParadaProdutoAtual,
+            CalcularPontoParadaNoCaixa(),
+            caminhoEntradaAtual,
+            minimoPontosAteCaixa,
+            maximoPontosAteCaixa
+        );
+
+        if (!trechoAteProdutoValido || !trechoAteCaixaValido)
+        {
+            // Se a rota automatica nao ficar realmente livre, cai no sistema antigo em vez de travar o NPC.
+            caminhoProdutoAtual.Clear();
+            caminhoEntradaAtual.Clear();
+            produtoDestinoAtual = null;
+            possuiPosicaoParadaProdutoAtual = false;
+            posicaoParadaProdutoAtual = Vector3.zero;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool TentarUsarRotaAleatoria(RotaWaypoint[] rotas, List<Transform> destino, ref int ultimoIndiceRota)
+    {
+        if (rotas == null || rotas.Length == 0)
+        {
+            return false;
+        }
+
+        List<int> indicesValidos = new List<int>();
+        for (int i = 0; i < rotas.Length; i++)
+        {
+            if (rotas[i] == null)
             {
-                // Mantem exatamente a ordem colocada no Inspector para este NPC.
-                caminhoAtual.Add(caminhoBase[i]);
+                continue;
+            }
+
+            if (rotas[i].pontos == null || rotas[i].pontos.Length == 0)
+            {
+                continue;
+            }
+
+            indicesValidos.Add(i);
+        }
+
+        if (indicesValidos.Count == 0)
+        {
+            return false;
+        }
+
+        int indiceRota = indicesValidos[Random.Range(0, indicesValidos.Count)];
+
+        if (indicesValidos.Count > 1)
+        {
+            int tentativas = 0;
+            while (indiceRota == ultimoIndiceRota && tentativas < 10)
+            {
+                indiceRota = indicesValidos[Random.Range(0, indicesValidos.Count)];
+                tentativas++;
             }
         }
+
+        ultimoIndiceRota = indiceRota;
+        return TentarCopiarPontosOrdenados(rotas[indiceRota].pontos, destino);
+    }
+
+    bool TentarCopiarPontosOrdenados(Transform[] pontosOrigem, List<Transform> destino)
+    {
+        destino.Clear();
+
+        if (pontosOrigem == null || pontosOrigem.Length == 0)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < pontosOrigem.Length; i++)
+        {
+            if (pontosOrigem[i] != null)
+            {
+                // Copia a rota exatamente na ordem em que ela foi definida no Inspector.
+                destino.Add(pontosOrigem[i]);
+            }
+        }
+
+        return destino.Count > 0;
     }
 
     void PrepararCaminhoAtual(Transform[] caminhoBase, List<Transform> caminhoAtual, bool sortearPontos)
@@ -1062,23 +1589,96 @@ public class SistemaCaixa : MonoBehaviour
         {
             if (caminhoBase[i] != null)
             {
-                // Copia somente os pontos validos para a rota deste cliente.
+                // Copia os pontos validos do fallback antigo para a rota atual.
                 caminhoAtual.Add(caminhoBase[i]);
             }
         }
 
         if (sortearPontos)
         {
-            // Embaralha os pontos para o modo antigo ter variacao.
+            // Fallback antigo que embaralha a lista inteira quando solicitado.
             EmbaralharCaminho(caminhoAtual);
         }
+    }
+
+    bool TentarConstruirCaminhoAutomatico(Vector3 origem, Vector3 destino, List<Transform> caminhoDestino, int minimoPontos, int maximoPontos)
+    {
+        caminhoDestino.Clear();
+
+        if (ExisteCaminhoLivreEntrePontos(origem, destino))
+        {
+            return true;
+        }
+
+        if (pontosCaminhoAutomatico.Count == 0)
+        {
+            return false;
+        }
+
+        int minimoNormalizado = Mathf.Max(0, minimoPontos);
+        int maximoNormalizado = Mathf.Max(minimoNormalizado, maximoPontos);
+        int quantidadeDesejada = Random.Range(minimoNormalizado, maximoNormalizado + 1);
+        Vector3 posicaoAtual = origem;
+        List<Transform> candidatosDisponiveis = new List<Transform>(pontosCaminhoAutomatico);
+
+        while (caminhoDestino.Count < quantidadeDesejada && candidatosDisponiveis.Count > 0)
+        {
+            Transform melhorPonto = null;
+            float melhorScore = float.MaxValue;
+            float distanciaAtualAoDestino = DistanciaPlana(posicaoAtual, destino);
+
+            for (int i = candidatosDisponiveis.Count - 1; i >= 0; i--)
+            {
+                Transform candidato = candidatosDisponiveis[i];
+                if (candidato == null)
+                {
+                    candidatosDisponiveis.RemoveAt(i);
+                    continue;
+                }
+
+                float distanciaDoPontoAoDestino = DistanciaPlana(candidato.position, destino);
+                if (distanciaDoPontoAoDestino >= distanciaAtualAoDestino - toleranciaMelhoraWaypoint)
+                {
+                    continue;
+                }
+
+                if (!ExisteCaminhoLivreEntrePontos(posicaoAtual, candidato.position))
+                {
+                    continue;
+                }
+
+                float score = DistanciaPlana(posicaoAtual, candidato.position) + (distanciaDoPontoAoDestino * 0.75f);
+                if (score < melhorScore)
+                {
+                    melhorScore = score;
+                    melhorPonto = candidato;
+                }
+            }
+
+            if (melhorPonto == null)
+            {
+                break;
+            }
+
+            // Escolhe o proximo ponto que mais aproxima o cliente do destino final.
+            caminhoDestino.Add(melhorPonto);
+            candidatosDisponiveis.Remove(melhorPonto);
+            posicaoAtual = melhorPonto.position;
+
+            if (caminhoDestino.Count >= minimoNormalizado && ExisteCaminhoLivreEntrePontos(posicaoAtual, destino))
+            {
+                return true;
+            }
+        }
+
+        return ExisteCaminhoLivreEntrePontos(posicaoAtual, destino) && (caminhoDestino.Count > 0 || minimoNormalizado == 0);
     }
 
     void EmbaralharCaminho(List<Transform> caminho)
     {
         for (int i = caminho.Count - 1; i > 0; i--)
         {
-            // Fisher-Yates: troca cada ponto com outro indice aleatorio da lista.
+            // Fisher-Yates cria uma ordem aleatoria sem repetir pontos.
             int indiceSorteado = Random.Range(0, i + 1);
             Transform pontoTemporario = caminho[i];
             caminho[i] = caminho[indiceSorteado];
@@ -1097,7 +1697,7 @@ public class SistemaCaixa : MonoBehaviour
         {
             if (caminho[i] == pontoIgnorado)
             {
-                // Evita repetir o ponto usado apenas como spawn ou despawn.
+                // Evita usar pontos tecnicos como waypoint intermediario por engano.
                 caminho.RemoveAt(i);
             }
         }
@@ -1137,7 +1737,7 @@ public class SistemaCaixa : MonoBehaviour
             }
         }
 
-        // Ordena para manter o pareamento previsivel entre NPC1, NPC2 e os produtos.
+        // Ordena para parear NPC1 com o primeiro produto, NPC2 com o segundo e assim por diante.
         modelosNpc.Sort((a, b) => string.Compare(a.name, b.name));
     }
 
@@ -1155,6 +1755,16 @@ public class SistemaCaixa : MonoBehaviour
             }
         }
 
+        if (modelosProduto.Count == 0 && raizProdutosInteragiveis != null)
+        {
+            Pickup[] pickupsInteragiveis = raizProdutosInteragiveis.GetComponentsInChildren<Pickup>(true);
+            for (int i = 0; i < pickupsInteragiveis.Length; i++)
+            {
+                // Prioriza os itens reais guardados na raiz de interagiveis para gerar o produto do caixa.
+                AdicionarModeloProduto(pickupsInteragiveis[i]);
+            }
+        }
+
         if (modelosProduto.Count == 0)
         {
             Pickup[] pickupsDaCena = Resources.FindObjectsOfTypeAll<Pickup>();
@@ -1166,9 +1776,9 @@ public class SistemaCaixa : MonoBehaviour
                     continue;
                 }
 
-                if (ProdutoPertenceAInteractables(pickupDaCena))
+                if (EstaDentroDosProdutosVisuaisDaLoja(pickupDaCena.transform))
                 {
-                    // Produtos da prateleira sao escolhidos pelo fluxo novo, nao viram modelo escondido.
+                    // Ignora os produtos so de fachada quando estamos procurando os interagiveis reais.
                     continue;
                 }
 
@@ -1176,8 +1786,81 @@ public class SistemaCaixa : MonoBehaviour
             }
         }
 
-        // Ordena para manter o pareamento previsivel entre Box1, Box2 e os NPCs.
+        // Ordena para manter o pareamento previsivel com os NPCs.
         modelosProduto.Sort((a, b) => string.Compare(a.name, b.name));
+    }
+
+    void PrepararProdutosDaLoja()
+    {
+        produtosDaLoja.Clear();
+
+        if (raizProdutosVisuaisLoja != null)
+        {
+            Pickup[] pickupsVisuais = raizProdutosVisuaisLoja.GetComponentsInChildren<Pickup>(true);
+            for (int i = 0; i < pickupsVisuais.Length; i++)
+            {
+                AdicionarProdutoVisualDaLoja(pickupsVisuais[i]);
+            }
+
+            return;
+        }
+
+        Pickup[] pickupsDaLoja = Resources.FindObjectsOfTypeAll<Pickup>();
+        for (int i = 0; i < pickupsDaLoja.Length; i++)
+        {
+            Pickup pickupDaLoja = pickupsDaLoja[i];
+            if (pickupDaLoja == null)
+            {
+                continue;
+            }
+
+            if (!pickupDaLoja.gameObject.scene.IsValid())
+            {
+                continue;
+            }
+
+            if (EstaDentroDeInteractables(pickupDaLoja.transform))
+            {
+                continue;
+            }
+
+            AdicionarProdutoVisualDaLoja(pickupDaLoja);
+        }
+    }
+
+    void AdicionarProdutoVisualDaLoja(Pickup pickupDaLoja)
+    {
+        if (pickupDaLoja == null)
+        {
+            return;
+        }
+
+        if (!ProdutoDaLojaPodeSerEscolhido(pickupDaLoja))
+        {
+            return;
+        }
+
+        // Produtos visuais ficam na prateleira apenas para o NPC parecer visitar a loja.
+        pickupDaLoja.ConfigurarComoProdutoVisualDaLoja(pickupDaLoja.ObterRaizProduto());
+
+        if (!produtosDaLoja.Contains(pickupDaLoja))
+        {
+            produtosDaLoja.Add(pickupDaLoja);
+        }
+    }
+
+    void PrepararPontosCaminhoAutomatico()
+    {
+        pontosCaminhoAutomatico.Clear();
+
+        // Junta todos os pontos ja existentes no projeto em um unico pool reutilizavel.
+        AdicionarPontosAoPoolAutomatico(caminhoEntrada);
+        AdicionarPontosAoPoolAutomatico(caminhoSaida);
+        AdicionarRotasAoPoolAutomatico(rotasEntradaAleatorias);
+        AdicionarRotasAoPoolAutomatico(rotasSaidaAleatorias);
+        AdicionarConfiguracoesAoPoolAutomatico();
+
+        pontosCaminhoAutomatico.RemoveAll(ponto => ponto == null || ponto == spawnNPC || ponto == despawnNPC || ponto == pontoParadaCaixa);
     }
 
     void AdicionarModeloNpc(GameObject modelo)
@@ -1187,16 +1870,9 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
-        NPCInteraction interacao = modelo.GetComponent<NPCInteraction>();
-        if (interacao != null)
-        {
-            // Desliga a interacao manual no modelo para evitar conflito com o cliente do caixa.
-            interacao.enabled = false;
-        }
-
         if (modelo.scene.IsValid())
         {
-            // Mantem o modelo-base escondido quando ele for um objeto da cena.
+            // Mantem o objeto-base da cena escondido para servir apenas como molde.
             modelo.SetActive(false);
         }
 
@@ -1210,32 +1886,91 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
-        if (ProdutoPertenceAInteractables(modelo))
-        {
-            // Mantem produtos reais da prateleira visiveis no cenario.
-            return;
-        }
-
-        Transform raizModelo = modelo.ObterRaizProduto();
-        if (raizModelo != null && raizModelo.gameObject.scene.IsValid())
-        {
-            // Mantem o produto-base escondido quando ele for um objeto da cena.
-            raizModelo.gameObject.SetActive(false);
-        }
-
         modelosProduto.Add(modelo);
+    }
+
+    int SortearIndiceNpc()
+    {
+        if (modelosNpc.Count <= 1)
+        {
+            return 0;
+        }
+
+        int indiceSorteado = Random.Range(0, modelosNpc.Count);
+
+        if (!evitarRepetirNpcEmSequencia)
+        {
+            return indiceSorteado;
+        }
+
+        int tentativas = 0;
+        while (indiceSorteado == ultimoIndiceNpc && tentativas < 10)
+        {
+            indiceSorteado = Random.Range(0, modelosNpc.Count);
+            tentativas++;
+        }
+
+        return indiceSorteado;
     }
 
     Pickup ObterProdutoDoNpc(int indiceNpc)
     {
         if (modelosProduto.Count == 0)
         {
+            return SortearProdutoDaLoja();
+        }
+
+        // Usa o pareamento por ordem para o modo legado.
+        int indiceProduto = indiceNpc % modelosProduto.Count;
+        return modelosProduto[indiceProduto];
+    }
+
+    Transform ObterPontoSpawnCliente()
+    {
+        List<Transform> pontosValidos = new List<Transform>();
+
+        if (pontosSpawn != null)
+        {
+            for (int i = 0; i < pontosSpawn.Length; i++)
+            {
+                if (pontosSpawn[i] != null)
+                {
+                    pontosValidos.Add(pontosSpawn[i]);
+                }
+            }
+        }
+
+        if (pontosValidos.Count > 0)
+        {
+            // Permite variar o ponto de entrada quando houver mais de um cadastrado.
+            return pontosValidos[Random.Range(0, pontosValidos.Count)];
+        }
+
+        return spawnNPC;
+    }
+
+    Pickup SortearProdutoDaLoja()
+    {
+        List<Pickup> produtosDisponiveis = new List<Pickup>();
+
+        for (int i = 0; i < produtosDaLoja.Count; i++)
+        {
+            Pickup produtoDaLoja = produtosDaLoja[i];
+            if (ProdutoDaLojaEstaDisponivel(produtoDaLoja) && ProdutoDaLojaPodeSerEscolhido(produtoDaLoja))
+            {
+                produtosDisponiveis.Add(produtoDaLoja);
+            }
+        }
+
+        if (produtosDisponiveis.Count == 0)
+        {
             return null;
         }
 
-        // Faz o pareamento por ordem para que NPC1 puxe Box1, NPC2 puxe Box2 e assim por diante.
-        int indiceProduto = indiceNpc % modelosProduto.Count;
-        return modelosProduto[indiceProduto];
+        OrdenarProdutosPorProximidadeDoCaixa(produtosDisponiveis);
+
+        int quantidadeConsiderada = Mathf.Clamp(quantidadeProdutosMaisProximos, 1, produtosDisponiveis.Count);
+        return produtosDisponiveis[Random.Range(0, quantidadeConsiderada)];
     }
 
     Pickup SpawnarProdutoAtual()
@@ -1245,74 +1980,8 @@ public class SistemaCaixa : MonoBehaviour
             return null;
         }
 
-        if (pickupProdutoCaixaPendente != null)
-        {
-            // Mostra no caixa a copia que foi criada antes da prateleira ser esvaziada.
-            return ColocarProdutoPendenteNoSpawn();
-        }
-
-        if (produtoDaPrateleiraAtual != null)
-        {
-            // Vende uma copia do produto; o produto-base da prateleira fica escondido como slot vazio.
-            return CriarCopiaDoProdutoNoCaixa(produtoDaPrateleiraAtual);
-        }
-
-        Transform raizModelo = modeloProdutoAtual.ObterRaizProduto();
-        if (raizModelo == null)
-        {
-            return null;
-        }
-
+        // O item aparece apenas quando o cliente ja esta posicionado no caixa.
         return CriarCopiaDoProdutoNoCaixa(modeloProdutoAtual);
-    }
-
-    void PrepararProdutoPendenteDoCaixa(Pickup produtoBase)
-    {
-        LimparProdutoPendenteDoCaixa();
-
-        Pickup copia = CriarCopiaDoProdutoNoCaixa(produtoBase);
-        if (copia == null)
-        {
-            return;
-        }
-
-        Transform raizCopia = copia.ObterRaizProduto();
-        produtoCaixaPendente = raizCopia != null ? raizCopia.gameObject : copia.gameObject;
-        pickupProdutoCaixaPendente = copia;
-
-        // A copia ja existe antes do item da prateleira sumir, mas so aparece quando o cliente chega ao caixa.
-        produtoCaixaPendente.SetActive(false);
-    }
-
-    Pickup ColocarProdutoPendenteNoSpawn()
-    {
-        if (pickupProdutoCaixaPendente == null || produtoCaixaPendente == null || spawnProduto == null)
-        {
-            LimparProdutoPendenteDoCaixa();
-            return null;
-        }
-
-        produtoCaixaPendente.transform.SetParent(null);
-        produtoCaixaPendente.transform.position = spawnProduto.position;
-        produtoCaixaPendente.transform.rotation = spawnProduto.rotation;
-        AtivarObjetoInteiro(produtoCaixaPendente.transform);
-        pickupProdutoCaixaPendente.ConfigurarComoProdutoDoCaixa(produtoCaixaPendente.transform);
-
-        Pickup produtoPronto = pickupProdutoCaixaPendente;
-        produtoCaixaPendente = null;
-        pickupProdutoCaixaPendente = null;
-        return produtoPronto;
-    }
-
-    void LimparProdutoPendenteDoCaixa()
-    {
-        if (produtoCaixaPendente != null)
-        {
-            Destroy(produtoCaixaPendente);
-        }
-
-        produtoCaixaPendente = null;
-        pickupProdutoCaixaPendente = null;
     }
 
     Pickup CriarCopiaDoProdutoNoCaixa(Pickup produtoBase)
@@ -1323,8 +1992,10 @@ public class SistemaCaixa : MonoBehaviour
             return null;
         }
 
-        // Clona a raiz completa do produto para assets formados por varios children.
-        GameObject novoObjeto = Instantiate(raizModelo.gameObject, spawnProduto.position, spawnProduto.rotation);
+        Vector3 posicaoSpawnProduto = CalcularPosicaoSpawnProdutoNoCaixa();
+
+        // Clona a raiz inteira do item para suportar modelos com varios filhos.
+        GameObject novoObjeto = Instantiate(raizModelo.gameObject, posicaoSpawnProduto, spawnProduto.rotation);
         novoObjeto.name = raizModelo.name;
         novoObjeto.SetActive(true);
         AtivarObjetoInteiro(novoObjeto.transform);
@@ -1333,11 +2004,14 @@ public class SistemaCaixa : MonoBehaviour
         if (novoProduto == null)
         {
             Debug.LogWarning("O produto clonado nao possui Pickup em nenhum child.", novoObjeto);
+            Destroy(novoObjeto);
             return null;
         }
 
-        // Marca a copia como item vendido para ela sumir depois de passar no scanner.
+        // Marca o clone como produto do caixa e protege contra autoescaneamento instantaneo.
         novoProduto.ConfigurarComoProdutoDoCaixa(novoObjeto.transform);
+        novoProduto.IgnorarScannerPorSegundos(tempoIgnorarScannerAoSpawnar);
+        AjustarFisicaDoProdutoClonado(novoObjeto.transform, novoProduto);
         return novoProduto;
     }
 
@@ -1348,8 +2022,9 @@ public class SistemaCaixa : MonoBehaviour
             return;
         }
 
-        // Garante que a copia apareca mesmo quando o produto-base estava escondido na prateleira.
+        // Reativa toda a hierarquia para o clone ficar visivel por completo.
         raiz.gameObject.SetActive(true);
+
         for (int i = 0; i < raiz.childCount; i++)
         {
             AtivarObjetoInteiro(raiz.GetChild(i));
@@ -1368,272 +2043,152 @@ public class SistemaCaixa : MonoBehaviour
         }
     }
 
-    bool TentarEscolherProdutoDaPrateleira()
+    void AjustarFisicaDoProdutoClonado(Transform raiz, Pickup pickupClonado)
     {
-        if (interactables == null)
-        {
-            return false;
-        }
-
-        PrepararProdutosDaPrateleira();
-
-        List<Pickup> produtosDisponiveis = new List<Pickup>();
-        Pickup[] pickups = interactables.GetComponentsInChildren<Pickup>(true);
-        for (int i = 0; i < pickups.Length; i++)
-        {
-            if (pickups[i].EstaDisponivelNaPrateleira())
-            {
-                produtosDisponiveis.Add(pickups[i]);
-            }
-        }
-
-        if (produtosDisponiveis.Count == 0)
-        {
-            return false;
-        }
-
-        produtoDaPrateleiraAtual = produtosDisponiveis[Random.Range(0, produtosDisponiveis.Count)];
-        if (!produtoDaPrateleiraAtual.ReservarParaNpc())
-        {
-            produtoDaPrateleiraAtual = null;
-            return false;
-        }
-
-        raizProdutoDaPrateleiraAtual = produtoDaPrateleiraAtual.ObterRaizProduto();
-        return raizProdutoDaPrateleiraAtual != null;
-    }
-
-    Transform ObterRaizProdutoDentroDeInteractables(Pickup pickup)
-    {
-        if (pickup == null || interactables == null)
-        {
-            return pickup != null ? pickup.transform : null;
-        }
-
-        Transform atual = pickup.transform;
-        while (atual.parent != null && atual.parent != interactables)
-        {
-            atual = atual.parent;
-        }
-
-        // O filho direto de Interactables representa o produto completo na prateleira.
-        return atual;
-    }
-
-    Transform ObterRaizProdutoDentroDoEstoque(Pickup pickup)
-    {
-        if (pickup == null)
-        {
-            return null;
-        }
-
-        Transform containerEstoque = ObterContainerEstoque(pickup.transform);
-        if (containerEstoque == null)
-        {
-            containerEstoque = storeModel;
-        }
-
-        Transform atual = pickup.transform;
-        while (atual.parent != null && atual.parent != containerEstoque)
-        {
-            atual = atual.parent;
-        }
-
-        // O filho direto do container de estoque representa o produto completo.
-        return atual;
-    }
-
-    Transform ObterContainerEstoque(Transform origem)
-    {
-        Transform atual = origem;
-        while (atual != null && atual != storeModel)
-        {
-            string nome = atual.name.ToLowerInvariant();
-            if (nome.Contains("estoque") || nome.Contains("stock"))
-            {
-                return atual;
-            }
-
-            atual = atual.parent;
-        }
-
-        return null;
-    }
-
-    bool ProdutoPertenceAInteractables(Pickup pickup)
-    {
-        if (pickup == null || interactables == null)
-        {
-            return false;
-        }
-
-        return pickup.transform == interactables || pickup.transform.IsChildOf(interactables);
-    }
-
-    int SortearIndiceNpc()
-    {
-        if (modelosNpc.Count <= 1)
-        {
-            return 0;
-        }
-
-        int indiceSorteado = Random.Range(0, modelosNpc.Count);
-
-        if (!evitarRepetirNpcEmSequencia)
-        {
-            return indiceSorteado;
-        }
-
-        // Tenta evitar repetir o mesmo NPC duas vezes seguidas.
-        int tentativas = 0;
-        while (indiceSorteado == ultimoIndiceNpc && tentativas < 10)
-        {
-            indiceSorteado = Random.Range(0, modelosNpc.Count);
-            tentativas++;
-        }
-
-        return indiceSorteado;
-    }
-
-    void ProcessarDigitacaoTroco()
-    {
-        bool houveMudanca = false;
-
-        // Le os caracteres digitados neste frame para montar o valor do troco.
-        foreach (char caractere in Input.inputString)
-        {
-            if (char.IsDigit(caractere))
-            {
-                if (trocoDigitadoEmCentavos.Length < maximoDigitosTroco)
-                {
-                    trocoDigitadoEmCentavos += caractere;
-                    avisoTrocoAtual = string.Empty;
-                    houveMudanca = true;
-                }
-            }
-            else if (caractere == '\b')
-            {
-                if (trocoDigitadoEmCentavos.Length > 0)
-                {
-                    trocoDigitadoEmCentavos = trocoDigitadoEmCentavos.Substring(0, trocoDigitadoEmCentavos.Length - 1);
-                    avisoTrocoAtual = string.Empty;
-                    houveMudanca = true;
-                }
-            }
-            else if (caractere == '\r' || caractere == '\n')
-            {
-                ConfirmarTrocoDigitado();
-                return;
-            }
-        }
-
-        if (houveMudanca)
-        {
-            AtualizarTextoTroco();
-        }
-    }
-
-    void ConfirmarTrocoDigitado()
-    {
-        if (!JogadorPertoDoScanner())
-        {
-            avisoTrocoAtual = "Chegue mais perto do caixa para confirmar o troco.";
-            AtualizarTextoTroco();
-            return;
-        }
-
-        float valorDigitado = ObterValorTrocoDigitado();
-        if (Mathf.Abs(valorDigitado - troco) <= 0.009f)
-        {
-            EntregarTroco();
-            return;
-        }
-
-        trocoDigitadoEmCentavos = string.Empty;
-        avisoTrocoAtual = "Troco incorreto. Digite novamente.";
-        AtualizarTextoTroco();
-    }
-
-    void AtualizarTextoTroco()
-    {
-        if (scanner == null)
+        if (raiz == null)
         {
             return;
         }
 
-        // Monta a mensagem completa exibida na tela enquanto o jogador digita.
-        string textoTroco =
-            mensagemTrocoAtual +
-            "\nTroco digitado: R$ " + FormatarTrocoDigitado();
-
-        if (!string.IsNullOrWhiteSpace(avisoTrocoAtual))
+        Rigidbody[] rigidbodies = raiz.GetComponentsInChildren<Rigidbody>(true);
+        for (int i = 0; i < rigidbodies.Length; i++)
         {
-            textoTroco += "\n" + avisoTrocoAtual;
+            // Mantem o clone parado e estavel no checkout ate o jogador pegar.
+            if (!rigidbodies[i].isKinematic)
+            {
+                rigidbodies[i].linearVelocity = Vector3.zero;
+                rigidbodies[i].angularVelocity = Vector3.zero;
+            }
+
+            rigidbodies[i].isKinematic = true;
+            rigidbodies[i].useGravity = false;
         }
 
-        scanner.MostrarTextoInfoProduto(textoTroco, 0f);
+        if (pickupClonado != null)
+        {
+            pickupClonado.FixarNoCaixa();
+        }
     }
 
-    Vector3 CalcularPontoParadaNoCaixa()
+    Vector3 CalcularPosicaoSpawnProdutoNoCaixa()
     {
-        if (scanner == null || spawnNPC == null || despawnNPC == null)
+        if (spawnProduto == null)
         {
             return Vector3.zero;
         }
 
-        Vector3 pontoParada = scanner.transform.position;
-        Vector3 eixoEntradaSaida = despawnNPC.position - spawnNPC.position;
-        eixoEntradaSaida.y = 0f;
-
-        // Mantem o NPC alinhado ao mesmo corredor principal da entrada e da saida.
-        if (Mathf.Abs(eixoEntradaSaida.x) >= Mathf.Abs(eixoEntradaSaida.z))
+        if (scanner == null)
         {
-            pontoParada.z = spawnNPC.position.z;
-            pontoParada.y = spawnNPC.position.y;
-        }
-        else
-        {
-            pontoParada.x = spawnNPC.position.x;
-            pontoParada.y = spawnNPC.position.y;
+            return spawnProduto.position;
         }
 
+        Vector3 posicaoBase = spawnProduto.position;
+        Vector3 deslocamentoBase = posicaoBase - scanner.transform.position;
+        deslocamentoBase.y = 0f;
+
+        if (deslocamentoBase.sqrMagnitude < 0.0001f)
+        {
+            deslocamentoBase = ObterDirecaoLateralDoCaixa();
+        }
+
+        Vector3 posicaoCorrigida = scanner.transform.position + deslocamentoBase.normalized * Mathf.Max(distanciaMinimaSpawnProdutoDoScanner, deslocamentoBase.magnitude);
+        posicaoCorrigida.y = posicaoBase.y;
+        return posicaoCorrigida;
+    }
+
+    Vector3 ObterDirecaoLateralDoCaixa()
+    {
+        Vector3 direcaoCorredor = despawnNPC != null && spawnNPC != null ? despawnNPC.position - spawnNPC.position : Vector3.right;
+        direcaoCorredor.y = 0f;
+
+        if (direcaoCorredor.sqrMagnitude < 0.0001f)
+        {
+            direcaoCorredor = Vector3.right;
+        }
+
+        Vector3 ladoA = Vector3.Cross(Vector3.up, direcaoCorredor).normalized;
+        Vector3 ladoB = -ladoA;
+        Vector3 referenciaSpawn = spawnProduto != null ? spawnProduto.position - scanner.transform.position : ladoA;
+        referenciaSpawn.y = 0f;
+
+        // Escolhe o lado que mais combina com a posicao original do SpawnObjects na cena.
+        return Vector3.Dot(referenciaSpawn, ladoA) >= Vector3.Dot(referenciaSpawn, ladoB) ? ladoA : ladoB;
+    }
+
+    Vector3 CalcularPontoParadaNoCaixa()
+    {
+        if (pontoParadaCaixa != null)
+        {
+            // Usa o waypoint manual de parada quando ele existir na cena.
+            Vector3 pontoManual = pontoParadaCaixa.position;
+            if (spawnNPC != null)
+            {
+                pontoManual.y = spawnNPC.position.y;
+            }
+
+            return pontoManual;
+        }
+
+        if (scanner != null)
+        {
+            // Fallback simples caso o waypoint manual nao exista.
+            return new Vector3(scanner.transform.position.x, spawnNPC != null ? spawnNPC.position.y : scanner.transform.position.y, scanner.transform.position.z);
+        }
+
+        return Vector3.zero;
+    }
+
+    Vector3 ObterPosicaoProdutoDestinoAtual()
+    {
+        if (possuiPosicaoParadaProdutoAtual)
+        {
+            return posicaoParadaProdutoAtual;
+        }
+
+        if (produtoDestinoAtual == null)
+        {
+            return CalcularPontoParadaNoCaixa();
+        }
+
+        Transform raizProdutoDestino = produtoDestinoAtual.ObterRaizProduto();
+        Vector3 posicaoProduto = raizProdutoDestino != null ? raizProdutoDestino.position : produtoDestinoAtual.transform.position;
+        posicaoProduto.y = npcAtual != null ? npcAtual.transform.position.y : posicaoProduto.y;
+        return posicaoProduto;
+    }
+
+    Vector3 CalcularPontoParadaNoProduto(Pickup produto, Vector3 referenciaAproximacao)
+    {
+        if (produto == null)
+        {
+            return referenciaAproximacao;
+        }
+
+        Transform raizProduto = produto.ObterRaizProduto();
+        Vector3 posicaoProduto = raizProduto != null ? raizProduto.position : produto.transform.position;
+        posicaoProduto.y = spawnNPC != null ? spawnNPC.position.y : posicaoProduto.y;
+
+        Vector3 referenciaPlana = referenciaAproximacao;
+        referenciaPlana.y = posicaoProduto.y;
+        Vector3 direcaoAproximacao = posicaoProduto - referenciaPlana;
+        direcaoAproximacao.y = 0f;
+
+        if (direcaoAproximacao.sqrMagnitude < 0.0001f)
+        {
+            direcaoAproximacao = pontoParadaCaixa != null
+                ? posicaoProduto - pontoParadaCaixa.position
+                : Vector3.forward;
+            direcaoAproximacao.y = 0f;
+        }
+
+        if (direcaoAproximacao.sqrMagnitude < 0.0001f)
+        {
+            direcaoAproximacao = Vector3.forward;
+        }
+
+        float distanciaSegura = Mathf.Max(distanciaParadaNoProduto, raioColisaoNpc + 0.35f);
+        Vector3 pontoParada = posicaoProduto - direcaoAproximacao.normalized * distanciaSegura;
+        pontoParada.y = posicaoProduto.y;
         return pontoParada;
-    }
-
-    Transform ObterPrimeiroTransformValido(Transform[] pontos)
-    {
-        if (pontos == null || pontos.Length == 0)
-        {
-            return null;
-        }
-
-        for (int i = 0; i < pontos.Length; i++)
-        {
-            if (pontos[i] != null)
-            {
-                return pontos[i];
-            }
-        }
-
-        return null;
-    }
-
-    Transform ObterUltimoTransformValido(Transform[] pontos)
-    {
-        if (pontos == null || pontos.Length == 0)
-        {
-            return null;
-        }
-
-        for (int i = pontos.Length - 1; i >= 0; i--)
-        {
-            if (pontos[i] != null)
-            {
-                return pontos[i];
-            }
-        }
-
-        return null;
     }
 
     bool JogadorPertoDoScanner()
@@ -1648,7 +2203,6 @@ public class SistemaCaixa : MonoBehaviour
         Vector3 posicaoScanner = scanner.transform.position;
         posicaoJogador.y = 0f;
         posicaoScanner.y = 0f;
-
         return Vector3.Distance(posicaoJogador, posicaoScanner) <= distanciaEntregaTroco;
     }
 
@@ -1666,7 +2220,7 @@ public class SistemaCaixa : MonoBehaviour
 
         if (valoresValidos.Count == 0)
         {
-            // Se nenhum valor configurado cobrir a compra, cria um fallback simples.
+            // Cria um fallback simples quando nenhum valor configurado cobre a compra.
             return preco + 10f;
         }
 
@@ -1692,8 +2246,196 @@ public class SistemaCaixa : MonoBehaviour
         return FormatarDinheiro(ObterValorTrocoDigitado());
     }
 
+    Pickup ObterProdutoDaLojaCorrespondente(Pickup produtoModelo)
+    {
+        if (produtosDaLoja.Count == 0)
+        {
+            return null;
+        }
+
+        if (produtoModelo == null)
+        {
+            return SortearProdutoDaLoja();
+        }
+
+        string identificadorModelo = NormalizarIdentificadorProduto(produtoModelo);
+        List<Pickup> correspondentes = new List<Pickup>();
+
+        for (int i = 0; i < produtosDaLoja.Count; i++)
+        {
+            Pickup produtoDaLoja = produtosDaLoja[i];
+            if (!ProdutoDaLojaEstaDisponivel(produtoDaLoja))
+            {
+                continue;
+            }
+
+            if (!ProdutoDaLojaPodeSerEscolhido(produtoDaLoja))
+            {
+                continue;
+            }
+
+            if (NormalizarIdentificadorProduto(produtoDaLoja) == identificadorModelo)
+            {
+                correspondentes.Add(produtoDaLoja);
+            }
+        }
+
+        if (correspondentes.Count > 0)
+        {
+            // Quando houver mais de uma copia do mesmo produto, usa a mais proxima do caixa.
+            OrdenarProdutosPorProximidadeDoCaixa(correspondentes);
+            return correspondentes[0];
+        }
+
+        return SortearProdutoDaLoja();
+    }
+
+    bool ProdutoDaLojaEstaDisponivel(Pickup produtoDaLoja)
+    {
+        if (produtoDaLoja == null)
+        {
+            return false;
+        }
+
+        Transform raizProduto = produtoDaLoja.ObterRaizProduto();
+        return raizProduto != null && raizProduto.gameObject.activeInHierarchy;
+    }
+
+    bool ProdutoDaLojaPodeSerEscolhido(Pickup produtoDaLoja)
+    {
+        if (produtoDaLoja == null)
+        {
+            return false;
+        }
+
+        Transform raizProduto = produtoDaLoja.ObterRaizProduto();
+        if (raizProduto == null)
+        {
+            return false;
+        }
+
+        if (raizProdutosAtendimentoNpc != null && !raizProduto.IsChildOf(raizProdutosAtendimentoNpc))
+        {
+            // Se existir uma raiz dedicada ao atendimento, o NPC so escolhe produto dali.
+            return false;
+        }
+
+        if (!limitarProdutosPelaDistanciaAoCaixa)
+        {
+            return true;
+        }
+
+        return DistanciaPlana(raizProduto.position, CalcularPontoParadaNoCaixa()) <= distanciaMaximaProdutoDoCaixa;
+    }
+
+    void OrdenarProdutosPorProximidadeDoCaixa(List<Pickup> produtosOrdenados)
+    {
+        Vector3 posicaoCaixa = CalcularPontoParadaNoCaixa();
+        produtosOrdenados.Sort((produtoA, produtoB) =>
+        {
+            float distanciaA = produtoA == null ? float.MaxValue : DistanciaPlana(produtoA.ObterRaizProduto().position, posicaoCaixa);
+            float distanciaB = produtoB == null ? float.MaxValue : DistanciaPlana(produtoB.ObterRaizProduto().position, posicaoCaixa);
+            return distanciaA.CompareTo(distanciaB);
+        });
+    }
+
+    string NormalizarIdentificadorProduto(Pickup produto)
+    {
+        if (produto == null)
+        {
+            return string.Empty;
+        }
+
+        string textoBase = produto.ObterCodigoProduto();
+        if (string.IsNullOrWhiteSpace(textoBase))
+        {
+            textoBase = produto.ObterNomeProduto();
+        }
+
+        return textoBase.Trim().ToLowerInvariant()
+            .Replace(" ", string.Empty)
+            .Replace("_", string.Empty)
+            .Replace("-", string.Empty);
+    }
+
+    bool EstaDentroDeInteractables(Transform item)
+    {
+        return raizProdutosInteragiveis != null && item != null && item.IsChildOf(raizProdutosInteragiveis);
+    }
+
+    bool EstaDentroDosProdutosVisuaisDaLoja(Transform item)
+    {
+        return raizProdutosVisuaisLoja != null && item != null && item.IsChildOf(raizProdutosVisuaisLoja);
+    }
+
+    void AdicionarPontosAoPoolAutomatico(Transform[] pontos)
+    {
+        if (pontos == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < pontos.Length; i++)
+        {
+            Transform ponto = pontos[i];
+            if (ponto != null && !pontosCaminhoAutomatico.Contains(ponto))
+            {
+                pontosCaminhoAutomatico.Add(ponto);
+            }
+        }
+    }
+
+    void AdicionarRotasAoPoolAutomatico(RotaWaypoint[] rotas)
+    {
+        if (rotas == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < rotas.Length; i++)
+        {
+            if (rotas[i] != null)
+            {
+                AdicionarPontosAoPoolAutomatico(rotas[i].pontos);
+            }
+        }
+    }
+
+    void AdicionarConfiguracoesAoPoolAutomatico()
+    {
+        if (configuracoesClientes == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < configuracoesClientes.Length; i++)
+        {
+            ConfiguracaoClienteCaixa configuracao = configuracoesClientes[i];
+            if (configuracao == null)
+            {
+                continue;
+            }
+
+            AdicionarPontosAoPoolAutomatico(configuracao.caminhoEntrada);
+            AdicionarPontosAoPoolAutomatico(configuracao.caminhoSaida);
+        }
+    }
+
+    float DistanciaPlana(Vector3 origem, Vector3 destino)
+    {
+        origem.y = 0f;
+        destino.y = 0f;
+        return Vector3.Distance(origem, destino);
+    }
+
     void LimparAtendimentoAtual()
     {
+        if (agenteNpcAtual != null && agenteNpcAtual.enabled && agenteNpcAtual.isOnNavMesh)
+        {
+            // Interrompe o deslocamento atual antes de destruir o clone.
+            agenteNpcAtual.ResetPath();
+        }
+
         if (npcAtual != null)
         {
             Destroy(npcAtual);
@@ -1702,21 +2444,29 @@ public class SistemaCaixa : MonoBehaviour
 
         if (produtoAtual != null)
         {
-            // Remove a raiz inteira do produto clonado, nao apenas o child que tem o Pickup.
+            // Remove a raiz inteira do clone para nao deixar sobras invisiveis no caixa.
             Transform raizProdutoAtual = produtoAtual.ObterRaizProduto();
             Destroy(raizProdutoAtual != null ? raizProdutoAtual.gameObject : produtoAtual.gameObject);
             produtoAtual = null;
         }
 
-        LimparProdutoPendenteDoCaixa();
         trocoDigitadoEmCentavos = string.Empty;
         mensagemTrocoAtual = string.Empty;
         avisoTrocoAtual = string.Empty;
         configuracaoAtual = null;
-        produtoDaPrateleiraAtual = null;
-        raizProdutoDaPrateleiraAtual = null;
+        produtoDestinoAtual = null;
+        modeloProdutoAtual = null;
+        agenteNpcAtual = null;
+        velocidadeNpcAtual = 0f;
+        ultimaDirecaoMovimentoNpc = Vector3.forward;
+        possuiPosicaoParadaProdutoAtual = false;
+        posicaoParadaProdutoAtual = Vector3.zero;
+        ultimoDestinoNavMesh = Vector3.zero;
+        destinoNavMeshDefinido = false;
+        caminhoProdutoAtual.Clear();
         caminhoEntradaAtual.Clear();
         caminhoSaidaAtual.Clear();
+        indiceWaypointProdutoAtual = 0;
         indiceWaypointEntradaAtual = 0;
         indiceWaypointSaidaAtual = 0;
     }

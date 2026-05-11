@@ -2,6 +2,7 @@
 
 public class PlayerCam : MonoBehaviour
 {
+    // Script responsavel por girar a camera em primeira pessoa.
     // Corpo do jogador que gira junto com a camera no eixo horizontal.
     public Transform player;
     // Sensibilidade do mouse para controlar a camera.

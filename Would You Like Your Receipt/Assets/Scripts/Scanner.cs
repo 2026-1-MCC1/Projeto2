@@ -5,6 +5,7 @@ using UnityEngine;
 
 public class Scanner : MonoBehaviour
 {
+    // Evento disparado sempre que um item valido termina o processo de leitura.
     public static event Action<Pickup> ProdutoEscaneado;
 
     // Referencia opcional para a barra antiga de teste.
@@ -12,7 +13,9 @@ public class Scanner : MonoBehaviour
     // Texto do Canvas usado para mostrar os dados do produto escaneado.
     [SerializeField] TMP_Text textoInfoProduto;
 
+    // Referencia ao GoalManager para atualizar objetivos e mensagens auxiliares.
     GoalManager goalManager;
+    // Guarda a coroutine atual que limpa o texto do scanner automaticamente.
     Coroutine limparTextoInfoProdutoCoroutine;
 
     private void Awake()

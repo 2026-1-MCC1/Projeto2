@@ -1,31 +1,10 @@
-﻿using System.Globalization;
-using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 public class Pickup : MonoBehaviour
 {
-    // Lista global dos espacos de prateleira que podem receber reposicao vinda do estoque.
-    static readonly List<Pickup> produtosDePrateleiraRegistrados = new List<Pickup>();
-
-    // Raiz opcional do produto completo. Use quando o Pickup estiver em uma tampa/child do asset.
+    // Raiz opcional do produto completo. Use quando o Pickup estiver em um child do modelo.
     [SerializeField] Transform produtoCompletoRoot;
-    // Distancia maxima para encaixar um item do estoque no lugar vazio da prateleira.
-    [SerializeField] float distanciaParaReporNaPrateleira = 1.2f;
-
-    // Controla se o produto esta preso ao ponto de segurar do jogador.
-    bool estaSegurando = false;
-    // Impede que o mesmo produto conte duas vezes no scanner.
-    bool foiEscaneado = false;
-    // Marca se este produto veio da prateleira e pode voltar para ela.
-    bool produtoDePrateleira = false;
-    // Marca se este item fica no estoque e serve para repor uma prateleira vazia.
-    bool produtoDeEstoque = false;
-    // Marca copias que foram levadas ao caixa e devem sumir depois do escaneamento.
-    bool produtoDoCaixa = false;
-    // Indica se o produto esta fisicamente no lugar original da prateleira.
-    bool estaNaPrateleira = false;
-    // Impede outro NPC de escolher o mesmo produto enquanto ele esta em atendimento.
-    bool reservadoPorNpc = false;
 
     // Forca aplicada quando o jogador arremessa o produto.
     [SerializeField] float throwForce = 150f;
@@ -36,47 +15,56 @@ public class Pickup : MonoBehaviour
     // Codigo opcional do produto.
     [SerializeField] string codigoProduto = "";
     // Preco exibido na tela quando o produto for escaneado.
-    [SerializeField] float precoProduto = 0f;
+    [SerializeField] float precoProduto;
     // Descricao curta do produto para a tela do scanner.
     [SerializeField] string descricaoProduto = "";
     // Define se o item deve sumir depois de ser escaneado.
     [SerializeField] bool destruirAposEscanear = true;
     // Mensagem opcional que aparece quando este item e escaneado.
     [SerializeField] string mensagemEscaneamento = "";
+    // Tempo padrao de exibicao da mensagem do produto.
     [SerializeField] float duracaoMensagemEscaneamento = 2f;
 
-    public CameraConsole console; // Permite selecionar o console de cameras no Inspector.
+    // Permite selecionar o console de cameras no Inspector.
+    public CameraConsole console;
 
-    // Ponto temporario onde o produto fica como filho enquanto esta sendo carregado.
+    // Marca se o item esta preso ao ponto de segurar do jogador.
+    bool estaSegurando;
+    // Impede que o mesmo item seja lido mais de uma vez.
+    bool foiEscaneado;
+    // Marca copias que nasceram no caixa para serem removidas depois da venda.
+    bool produtoDoCaixa;
+    // Define se o jogador pode pegar e escanear este item neste momento.
+    bool permiteInteracaoJogador = true;
+    // Marca itens que funcionam apenas como representacao visual da prateleira.
+    bool produtoVisualDaLoja;
+    // Tempo minimo ate o item voltar a poder ser lido pelo scanner.
+    float instanteLiberadoParaScanner;
+    // Indica se o item esta travado no checkout aguardando o clique do jogador.
+    bool travadoNoCaixa;
+
+    // Ponto temporario onde o item fica enquanto esta sendo carregado.
     TempParent tempParent;
-    // Rigidbody usado para ativar/desativar gravidade e zerar movimentos.
+    // Rigidbody principal do produto.
     Rigidbody rb;
-    // Guarda a posicao atual antes de soltar o objeto.
-    Vector3 objPosition;
-    // Raiz resolvida do produto completo usado para mover, esconder ou destruir o item inteiro.
+    // Raiz real do asset inteiro que deve ser movida, destruida e instanciada.
     Transform raizProduto;
-    // Dados originais usados para encaixar o produto de volta na prateleira.
-    Transform prateleiraOriginal;
-    Vector3 posicaoLocalOriginal;
-    Quaternion rotacaoLocalOriginal;
-    Vector3 escalaLocalOriginal;
-    string chaveProduto = string.Empty;
 
     private void Awake()
     {
-        // Resolve a raiz do produto antes de outros sistemas tentarem usar este item.
+        // Resolve a raiz logo no inicio para os outros sistemas usarem a hierarquia correta.
         raizProduto = ResolverRaizProduto();
     }
 
-    void Start()
+    private void Start()
     {
-        // Pega as referencias necessarias para o comportamento de carregar item.
+        // Busca as referencias locais usadas no fluxo de pegar e soltar.
         rb = ObterRigidbodyDoProduto();
         tempParent = TempParent.Instance;
 
         if (console == null)
         {
-            // Recupera a configuracao do console de cameras caso o campo esteja vazio.
+            // Recupera a configuracao do console caso o campo esteja vazio no Inspector.
             console = Object.FindFirstObjectByType<CameraConsole>();
         }
 
@@ -86,9 +74,9 @@ public class Pickup : MonoBehaviour
         }
     }
 
-    void Update()
+    private void Update()
     {
-        // Mantem as regras de segurar enquanto o item esta na mao do jogador.
+        // Mantem a logica de arraste ativa apenas enquanto o jogador segura o item.
         if (estaSegurando)
         {
             Segurar();
@@ -97,78 +85,83 @@ public class Pickup : MonoBehaviour
 
     private void OnMouseDown()
     {
-        // Pega o item se ele estiver perto o bastante do jogador.
-        if (tempParent != null)
-        {
-            float distance = Vector3.Distance(transform.position, tempParent.transform.position);
-            if (distance <= maxDistance && raizProduto != null)
-            {
-                estaSegurando = true;
-
-                if (rb != null)
-                {
-                    rb.useGravity = false;
-                    rb.detectCollisions = true;
-                }
-
-                raizProduto.SetParent(tempParent.transform);
-            }
-        }
-        else
-        {
-            Debug.Log("TempParent item not found in scene!");
-        }
+        // Encaminha o clique para a mesma rotina usada pelos proxies.
+        IniciarSegurarPeloProxy();
     }
 
     private void OnMouseUp()
     {
-        // Solta o item ao soltar o botao do mouse.
-        Soltar();
+        // Solta o item quando o botao do mouse for liberado.
+        SoltarPeloProxy();
     }
 
     private void OnMouseExit()
     {
-        // Solta o item quando o mouse sai do objeto.
-        Soltar();
+        // Nao soltamos aqui para permitir arrastar sem perder o item no meio do movimento.
     }
 
-    private void Segurar()
+    public void IniciarSegurarPeloProxy()
     {
-        float distance = Vector3.Distance(transform.position, tempParent.transform.position);
-
-        // Solta o item se ele ficar longe demais do jogador.
-        if (distance >= maxDistance)
+        if (!permiteInteracaoJogador)
         {
-            Soltar();
+            return;
         }
 
-        // Solta o item quando o console de cameras for aberto.
-        if (console != null && Input.GetKeyDown(console.OpenCameras))
+        if (tempParent == null)
         {
-            Soltar();
+            Debug.Log("TempParent item not found in scene!");
+            return;
+        }
+
+        Transform raiz = ObterRaizProduto();
+        if (raiz == null)
+        {
+            return;
+        }
+
+        // So permite pegar o item quando ele estiver perto o bastante da mao do jogador.
+        float distance = Vector3.Distance(raiz.position, tempParent.transform.position);
+        if (distance > maxDistance)
+        {
+            return;
+        }
+
+        estaSegurando = true;
+
+        if (travadoNoCaixa)
+        {
+            // Desprende o item do checkout antes de leva-lo para a mao do jogador.
+            raiz.SetParent(null);
         }
 
         if (rb != null)
         {
+            // Desliga a gravidade enquanto o item esta sendo segurado.
+            rb.isKinematic = false;
+            rb.useGravity = false;
+            rb.detectCollisions = true;
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
 
-        // Joga o item para frente ao clicar com o botao direito.
-        if (Input.GetMouseButtonDown(1))
-        {
-            if (rb != null)
-            {
-                rb.AddForce(tempParent.transform.forward * throwForce);
-            }
+        travadoNoCaixa = false;
+        raiz.SetParent(tempParent.transform);
+    }
 
-            Soltar();
-        }
+    public void SoltarPeloProxy()
+    {
+        // Reaproveita a mesma rotina de soltura para clique direto e proxy.
+        Soltar();
     }
 
     public bool TentarIniciarEscaneamento()
     {
-        if (foiEscaneado)
+        if (!permiteInteracaoJogador)
+        {
+            return false;
+        }
+
+        if (!PodeSerEscaneadoAgora() || foiEscaneado)
         {
             return false;
         }
@@ -176,14 +169,31 @@ public class Pickup : MonoBehaviour
         // Marca o item como lido para impedir escaneamentos duplicados.
         foiEscaneado = true;
 
-        // Solta o item antes de finalizar a leitura para evitar conflitos com o objeto segurado.
+        // Solta o item antes de finalizar a leitura para nao misturar o scanner com o drag.
         Soltar();
         return true;
     }
 
+    public void IgnorarScannerPorSegundos(float duracao)
+    {
+        // Evita autoescaneamento no mesmo instante em que o item aparece no caixa.
+        instanteLiberadoParaScanner = Time.time + Mathf.Max(0f, duracao);
+    }
+
+    public bool PodeSerEscaneadoAgora()
+    {
+        if (travadoNoCaixa)
+        {
+            // Enquanto o item estiver fixo no checkout, ele nao pode se escanear sozinho.
+            return false;
+        }
+
+        return Time.time >= instanteLiberadoParaScanner;
+    }
+
     public Transform ObterRaizProduto()
     {
-        // Entrega a raiz completa para sistemas que precisam instanciar ou mover o asset inteiro.
+        // Entrega a raiz completa para os sistemas que lidam com clones e fisica.
         if (raizProduto == null)
         {
             raizProduto = ResolverRaizProduto();
@@ -192,113 +202,92 @@ public class Pickup : MonoBehaviour
         return raizProduto;
     }
 
-    public void ConfigurarComoProdutoDePrateleira(Transform raizCompleta)
+    public void DefinirRaizDoProduto(Transform raizCompleta)
     {
-        // Guarda o lugar original para permitir reposicao depois que o jogador devolver o produto.
+        // Permite que o configurador automatico diga qual Transform representa o produto inteiro.
         produtoCompletoRoot = raizCompleta != null ? raizCompleta : produtoCompletoRoot;
         raizProduto = ResolverRaizProduto();
-
-        if (raizProduto == null)
-        {
-            return;
-        }
-
-        produtoDePrateleira = true;
-        produtoDeEstoque = false;
-        produtoDoCaixa = false;
-        estaNaPrateleira = true;
-        reservadoPorNpc = false;
-        chaveProduto = ObterChaveProduto();
-        prateleiraOriginal = raizProduto.parent;
-        posicaoLocalOriginal = raizProduto.localPosition;
-        rotacaoLocalOriginal = raizProduto.localRotation;
-        escalaLocalOriginal = raizProduto.localScale;
-
-        if (!produtosDePrateleiraRegistrados.Contains(this))
-        {
-            // Registra este item como um espaco de prateleira que pode ficar vazio.
-            produtosDePrateleiraRegistrados.Add(this);
-        }
+        rb = ObterRigidbodyDoProduto();
     }
 
-    public void ConfigurarComoProdutoDeEstoque(Transform raizCompleta)
+    public void FixarNoCaixa()
     {
-        // Guarda a raiz completa do item do estoque para mover o asset inteiro.
-        produtoCompletoRoot = raizCompleta != null ? raizCompleta : produtoCompletoRoot;
-        raizProduto = ResolverRaizProduto();
+        // Mantem o item parado no checkout ate o jogador clicar nele.
+        travadoNoCaixa = true;
 
-        if (raizProduto == null)
+        if (rb != null)
         {
-            return;
+            PrepararRigidbodyKinematico();
         }
-
-        produtoDePrateleira = false;
-        produtoDeEstoque = true;
-        produtoDoCaixa = false;
-        estaNaPrateleira = false;
-        reservadoPorNpc = false;
-        chaveProduto = ObterChaveProduto();
     }
 
     public void ConfigurarComoProdutoDoCaixa(Transform raizCompleta)
     {
-        // Copias no caixa sao produtos vendidos, nao espacos de prateleira nem estoque.
+        // Marca o clone como item de checkout e reseta os estados de leitura.
         produtoCompletoRoot = raizCompleta != null ? raizCompleta : produtoCompletoRoot;
         raizProduto = ResolverRaizProduto();
-        produtoDePrateleira = false;
-        produtoDeEstoque = false;
+        rb = ObterRigidbodyDoProduto();
         produtoDoCaixa = true;
-        estaNaPrateleira = false;
-        reservadoPorNpc = false;
-        chaveProduto = ObterChaveProduto();
+        produtoVisualDaLoja = false;
+        permiteInteracaoJogador = true;
+        foiEscaneado = false;
+        travadoNoCaixa = false;
     }
 
-    public bool EstaDisponivelNaPrateleira()
+    public void ConfigurarComoProdutoVisualDaLoja(Transform raizCompleta)
     {
-        // O NPC so pode pegar produtos que ainda estejam no lugar da prateleira.
-        return produtoDePrateleira &&
-               estaNaPrateleira &&
-               !reservadoPorNpc &&
-               ObterRaizProduto() != null &&
-               ObterRaizProduto().gameObject.activeInHierarchy;
-    }
+        // Mantem o item visivel na loja, mas sem permitir pegar ou escanear antes do caixa.
+        produtoCompletoRoot = raizCompleta != null ? raizCompleta : produtoCompletoRoot;
+        raizProduto = ResolverRaizProduto();
+        rb = ObterRigidbodyDoProduto();
+        produtoDoCaixa = false;
+        produtoVisualDaLoja = true;
+        permiteInteracaoJogador = false;
+        foiEscaneado = false;
+        estaSegurando = false;
+        travadoNoCaixa = false;
 
-    public bool ReservarParaNpc()
-    {
-        if (!EstaDisponivelNaPrateleira())
+        if (rb != null)
         {
-            return false;
+            // Produto visual da loja fica parado, sem gravidade, ate o NPC "retira-lo" da prateleira.
+            PrepararRigidbodyKinematico();
         }
-
-        // Reserva evita que dois clientes tentem pegar o mesmo item ao mesmo tempo.
-        reservadoPorNpc = true;
-        return true;
     }
 
-    public void RetirarDaPrateleiraParaNpc()
+    public void EsconderProdutoVisualDaLoja()
     {
-        Transform raiz = ObterRaizProduto();
-        if (raiz == null)
+        if (!produtoVisualDaLoja)
         {
             return;
         }
 
-        // Esconde o produto na hora que o NPC chega nele, deixando a prateleira vazia.
-        estaNaPrateleira = false;
-        raiz.gameObject.SetActive(false);
+        Transform raiz = ObterRaizProduto();
+        if (raiz != null)
+        {
+            // Simula o NPC tirando o item da prateleira antes de levar para o caixa.
+            raiz.gameObject.SetActive(false);
+        }
     }
 
-    public void LiberarDepoisDoAtendimento()
+    public void MostrarProdutoVisualDaLoja()
     {
-        // Depois do atendimento, este espaco fica livre para receber reposicao do estoque.
-        reservadoPorNpc = false;
+        if (!produtoVisualDaLoja)
+        {
+            return;
+        }
+
+        Transform raiz = ObterRaizProduto();
+        if (raiz != null)
+        {
+            // Deixa o produto pronto para reaparecer quando voce quiser fazer o reestoque.
+            raiz.gameObject.SetActive(true);
+        }
     }
 
     public string ObterMensagemEscaneamento()
     {
-        // Monta o texto com as informacoes do produto para mostrar na tela do scanner.
-        string nomeExibicao = string.IsNullOrWhiteSpace(nomeProduto) ? gameObject.name : nomeProduto;
-        string mensagem = "Produto: " + nomeExibicao;
+        // Monta o texto completo com os dados do item para o Canvas do scanner.
+        string mensagem = "Produto: " + ObterNomeProduto();
 
         if (!string.IsNullOrWhiteSpace(codigoProduto))
         {
@@ -325,8 +314,14 @@ public class Pickup : MonoBehaviour
 
     public string ObterNomeProduto()
     {
-        // Usa o nome configurado no Inspector ou o nome do GameObject como fallback.
+        // Usa o nome configurado no Inspector ou cai no nome do objeto como fallback.
         return string.IsNullOrWhiteSpace(nomeProduto) ? gameObject.name : nomeProduto;
+    }
+
+    public string ObterCodigoProduto()
+    {
+        // Entrega o codigo puro para sistemas que precisem casar produtos automaticamente.
+        return codigoProduto;
     }
 
     public float ObterPrecoProduto()
@@ -337,60 +332,102 @@ public class Pickup : MonoBehaviour
 
     public float ObterDuracaoMensagemEscaneamento()
     {
-        // Define por quanto tempo a mensagem do produto fica visivel.
+        // Define por quanto tempo a mensagem do item fica visivel no scanner.
         return duracaoMensagemEscaneamento;
     }
 
     public void FinalizarEscaneamento()
     {
-        if (produtoDePrateleira)
-        {
-            // O produto-base da prateleira fica escondido ate alguem repor pelo estoque.
-            LiberarDepoisDoAtendimento();
-            return;
-        }
-
         if (produtoDoCaixa || destruirAposEscanear)
         {
-            // Remove o produto vendido do caixa depois do escaneamento.
+            // Remove o item vendido para nao deixar sobras no checkout.
             Transform raiz = ObterRaizProduto();
             Destroy(raiz != null ? raiz.gameObject : gameObject);
         }
     }
 
-    private void Soltar()
+    private void Segurar()
     {
-        // Solta o item e devolve gravidade para ele.
-        if (estaSegurando)
+        if (tempParent == null)
         {
-            estaSegurando = false;
-            Transform raiz = ObterRaizProduto();
-            objPosition = raiz != null ? raiz.position : transform.position;
+            Soltar();
+            return;
+        }
 
-            if (raiz != null)
-            {
-                raiz.position = objPosition;
-                raiz.SetParent(null);
-            }
+        Transform raiz = ObterRaizProduto();
+        if (raiz == null)
+        {
+            Soltar();
+            return;
+        }
 
+        float distance = Vector3.Distance(raiz.position, tempParent.transform.position);
+
+        // Solta o item se ele se afastar demais da ancora de segurar.
+        if (distance >= maxDistance)
+        {
+            Soltar();
+            return;
+        }
+
+        // Solta o item se o jogador abrir o console de cameras.
+        if (console != null && Input.GetKeyDown(console.OpenCameras))
+        {
+            Soltar();
+            return;
+        }
+
+        if (rb != null)
+        {
+            // Zera a fisica para o item acompanhar a mao sem vibracao.
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
+
+        if (Input.GetMouseButtonDown(1))
+        {
+            // Arremessa o item para frente e encerra o arraste.
             if (rb != null)
             {
-                rb.useGravity = true;
+                rb.AddForce(tempParent.transform.forward * throwForce);
             }
 
-            TentarReporNaPrateleira();
+            Soltar();
+        }
+    }
+
+    private void Soltar()
+    {
+        if (!estaSegurando)
+        {
+            return;
+        }
+
+        // Solta o item e devolve o controle fisico para o mundo.
+        estaSegurando = false;
+
+        Transform raiz = ObterRaizProduto();
+        if (raiz != null)
+        {
+            raiz.SetParent(null);
+        }
+
+        if (rb != null)
+        {
+            rb.isKinematic = false;
+            rb.useGravity = true;
         }
     }
 
     private Transform ResolverRaizProduto()
     {
-        // Quando uma raiz foi definida no Inspector, ela vence qualquer fallback automatico.
+        // Quando uma raiz foi definida manualmente, ela sempre vence.
         if (produtoCompletoRoot != null)
         {
             return produtoCompletoRoot;
         }
 
-        // Fallback seguro para objetos simples onde o Pickup ja esta na raiz.
+        // Fallback para itens simples onde o Pickup ja esta no objeto principal.
         return transform;
     }
 
@@ -402,155 +439,27 @@ public class Pickup : MonoBehaviour
             return GetComponent<Rigidbody>();
         }
 
-        // Aceita Rigidbody na raiz ou em algum child do asset importado.
+        // Aceita Rigidbody na raiz ou em qualquer child do modelo importado.
         Rigidbody rigidbodyRaiz = raiz.GetComponent<Rigidbody>();
         return rigidbodyRaiz != null ? rigidbodyRaiz : raiz.GetComponentInChildren<Rigidbody>();
     }
 
-    private void TentarReporNaPrateleira()
+    void PrepararRigidbodyKinematico()
     {
-        if (produtoDeEstoque)
-        {
-            // Itens do estoque abastecem uma prateleira vazia equivalente.
-            TentarAbastecerPrateleiraComEstoque();
-            return;
-        }
-
-        if (!produtoDePrateleira || reservadoPorNpc || prateleiraOriginal == null)
+        if (rb == null)
         {
             return;
         }
 
-        Transform raiz = ObterRaizProduto();
-        if (raiz == null)
+        if (!rb.isKinematic)
         {
-            return;
-        }
-
-        Vector3 posicaoOriginalMundo = prateleiraOriginal.TransformPoint(posicaoLocalOriginal);
-        if (Vector3.Distance(raiz.position, posicaoOriginalMundo) > distanciaParaReporNaPrateleira)
-        {
-            return;
-        }
-
-        // Encaixa de volta no mesmo ponto quando o jogador solta perto da posicao original.
-        raiz.SetParent(prateleiraOriginal);
-        raiz.localPosition = posicaoLocalOriginal;
-        raiz.localRotation = rotacaoLocalOriginal;
-        raiz.localScale = escalaLocalOriginal;
-        estaNaPrateleira = true;
-        foiEscaneado = false;
-
-        if (rb != null)
-        {
+            // Zera a fisica antes de travar o corpo para evitar warnings da Unity.
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
-    }
 
-    private void TentarAbastecerPrateleiraComEstoque()
-    {
-        Transform raizEstoque = ObterRaizProduto();
-        if (raizEstoque == null)
-        {
-            return;
-        }
-
-        Pickup melhorEspaco = null;
-        float melhorDistancia = float.MaxValue;
-
-        for (int i = produtosDePrateleiraRegistrados.Count - 1; i >= 0; i--)
-        {
-            Pickup espaco = produtosDePrateleiraRegistrados[i];
-            if (espaco == null)
-            {
-                produtosDePrateleiraRegistrados.RemoveAt(i);
-                continue;
-            }
-
-            if (!espaco.PodeReceberReposicaoDe(this))
-            {
-                continue;
-            }
-
-            float distancia = Vector3.Distance(raizEstoque.position, espaco.ObterPosicaoOriginalMundo());
-            if (distancia < melhorDistancia)
-            {
-                melhorDistancia = distancia;
-                melhorEspaco = espaco;
-            }
-        }
-
-        if (melhorEspaco == null || melhorDistancia > distanciaParaReporNaPrateleira)
-        {
-            return;
-        }
-
-        // Reativa o produto da prateleira no lugar correto e consome o item do estoque.
-        melhorEspaco.ReporPrateleira();
-        Destroy(raizEstoque.gameObject);
-    }
-
-    private bool PodeReceberReposicaoDe(Pickup produtoEstoque)
-    {
-        if (!produtoDePrateleira || estaNaPrateleira || reservadoPorNpc || produtoEstoque == null)
-        {
-            return false;
-        }
-
-        return ObterChaveProduto() == produtoEstoque.ObterChaveProduto();
-    }
-
-    private void ReporPrateleira()
-    {
-        Transform raiz = ObterRaizProduto();
-        if (raiz == null || prateleiraOriginal == null)
-        {
-            return;
-        }
-
-        // Volta o produto-base para o slot original da prateleira.
-        raiz.SetParent(prateleiraOriginal);
-        raiz.localPosition = posicaoLocalOriginal;
-        raiz.localRotation = rotacaoLocalOriginal;
-        raiz.localScale = escalaLocalOriginal;
-        raiz.gameObject.SetActive(true);
-        estaNaPrateleira = true;
-        reservadoPorNpc = false;
-        foiEscaneado = false;
-    }
-
-    private Vector3 ObterPosicaoOriginalMundo()
-    {
-        if (prateleiraOriginal == null)
-        {
-            Transform raiz = ObterRaizProduto();
-            return raiz != null ? raiz.position : transform.position;
-        }
-
-        return prateleiraOriginal.TransformPoint(posicaoLocalOriginal);
-    }
-
-    private string ObterChaveProduto()
-    {
-        // A chave une estoque e prateleira sem depender de referencia manual no Inspector.
-        string textoBase = !string.IsNullOrWhiteSpace(codigoProduto) ? codigoProduto : ObterNomeProduto();
-        return NormalizarTexto(textoBase);
-    }
-
-    private string NormalizarTexto(string texto)
-    {
-        if (string.IsNullOrWhiteSpace(texto))
-        {
-            Transform raiz = ObterRaizProduto();
-            texto = raiz != null ? raiz.name : gameObject.name;
-        }
-
-        return texto.Trim().ToLowerInvariant()
-            .Replace(" ", string.Empty)
-            .Replace("_", string.Empty)
-            .Replace("-", string.Empty)
-            .Replace("(", string.Empty)
-            .Replace(")", string.Empty);
+        rb.isKinematic = true;
+        rb.useGravity = false;
+        rb.detectCollisions = true;
     }
 }
