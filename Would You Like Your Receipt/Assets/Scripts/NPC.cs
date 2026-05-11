@@ -2,6 +2,8 @@
 
 public class NPCInteraction : MonoBehaviour
 {
+    // Este script serve para NPCs parados/interagiveis da cena.
+    // Os clientes automaticos do caixa desativam este componente para nao conflitar com a fila.
     // Script de interacao para NPCs fixos da cena.
     // Distancia maxima para o jogador interagir com o NPC.
     public float interactionDistance = 3f;
@@ -18,6 +20,8 @@ public class NPCInteraction : MonoBehaviour
 
     private void Start()
     {
+        // No Start, o script encontra as referencias que precisa para funcionar.
+        // Isso evita depender de todos os campos preenchidos manualmente no Inspector.
         if (player == null)
         {
             // Procura o jogador automaticamente caso ele nao tenha sido ligado no Inspector.
@@ -38,6 +42,7 @@ public class NPCInteraction : MonoBehaviour
 
     private void Update()
     {
+        // A cada frame, verifica se o jogador esta perto e apertou E.
         if (player == null)
         {
             return;
@@ -59,6 +64,7 @@ public class NPCInteraction : MonoBehaviour
 
     private void Interact()
     {
+        // Mostra a mensagem do NPC na UI e tambem no Console da Unity para debug.
         if (goalManager != null)
         {
             // Mostra a fala do NPC no mesmo texto usado pelos objetivos.

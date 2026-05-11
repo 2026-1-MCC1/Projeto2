@@ -5,6 +5,8 @@ using UnityEngine;
 
 public class Scanner : MonoBehaviour
 {
+    // Este script representa o scanner do caixa.
+    // Quando um produto encosta nele, o script tenta validar o item, atualizar objetivos e mostrar dados na tela.
     // Evento disparado sempre que um item valido termina o processo de leitura.
     public static event Action<Pickup> ProdutoEscaneado;
 
@@ -20,6 +22,8 @@ public class Scanner : MonoBehaviour
 
     private void Awake()
     {
+        // Busca referencias importantes antes do jogo comecar.
+        // Assim o scanner continua funcionando mesmo se alguns campos nao forem preenchidos no Inspector.
         goalManager = GoalManager.Instance;
         if (goalManager == null)
         {
@@ -63,6 +67,8 @@ public class Scanner : MonoBehaviour
 
     private void TryScan(Transform otherTransform)
     {
+        // Tenta encontrar um Pickup no objeto que encostou no scanner.
+        // GetComponentInParent permite que colliders filhos tambem sejam reconhecidos como produto.
         Pickup pickup = otherTransform.GetComponentInParent<Pickup>();
         if (pickup == null)
         {
@@ -98,11 +104,13 @@ public class Scanner : MonoBehaviour
         }
 
         ProdutoEscaneado?.Invoke(pickup);
+        // Depois de avisar outros sistemas, finaliza o produto para ele sumir ou marcar venda.
         pickup.FinalizarEscaneamento();
     }
 
     public void MostrarTextoInfoProduto(string texto, float duracao = 0f)
     {
+        // Mostra mensagens longas do scanner, como nome/preco do produto e etapa do troco.
         if (textoInfoProduto == null)
         {
             return;
@@ -125,6 +133,7 @@ public class Scanner : MonoBehaviour
 
     public void LimparTextoInfoProduto()
     {
+        // Limpa qualquer mensagem ativa no texto do scanner.
         if (limparTextoInfoProdutoCoroutine != null)
         {
             StopCoroutine(limparTextoInfoProdutoCoroutine);
@@ -139,6 +148,7 @@ public class Scanner : MonoBehaviour
 
     private IEnumerator LimparTextoInfoProdutoDepois(float delay)
     {
+        // Coroutine usada para esperar alguns segundos sem travar o resto do jogo.
         if (delay > 0f)
         {
             yield return new WaitForSeconds(delay);

@@ -31,6 +31,9 @@ public class RotaWaypoint
 
 public class SistemaCaixa : MonoBehaviour
 {
+    // Este e o sistema principal dos clientes automaticos.
+    // Ele escolhe NPCs, produtos, rotas, controla a ida ao produto, ida ao caixa, scan, troco e saida.
+    // A maior parte do comportamento do mercado acontece aqui.
     // Estados principais do fluxo de atendimento.
     enum EstadoCliente
     {
@@ -111,6 +114,12 @@ public class SistemaCaixa : MonoBehaviour
     [SerializeField] float distanciaChegadaWaypoint = 0.12f;
     // Distancia minima entre o scanner e o item que nasce no caixa.
     [SerializeField] float distanciaMinimaSpawnProdutoDoScanner = 1.05f;
+    // Altura aproximada em que o cliente segura o produto durante a compra.
+    [SerializeField] Vector3 offsetProdutoCarregadoNpc = new Vector3(0f, 0.48f, 0.42f);
+    // Escala visual aplicada ao produto carregado para ele nao atrapalhar o corpo do NPC.
+    [SerializeField] float escalaProdutoCarregadoNpc = 0.35f;
+    // Tamanho visual maximo do produto enquanto esta na mao do NPC.
+    [SerializeField] float tamanhoMaximoProdutoCarregadoNpc = 0.45f;
     // Tempo de protecao para o item nao ser lido pelo scanner no mesmo frame.
     [SerializeField] float tempoIgnorarScannerAoSpawnar = 0.75f;
     // Diz se o fallback antigo pode embaralhar os pontos de entrada.
@@ -133,6 +142,8 @@ public class SistemaCaixa : MonoBehaviour
     [SerializeField] int minimoPontosAteCaixa = 0;
     // Quantidade maxima de waypoints escolhidos do produto ate o caixa.
     [SerializeField] int maximoPontosAteCaixa = 2;
+    // Quantos pontos aleatorios o cliente pode visitar antes de ir ao produto.
+    [SerializeField] int maximoPontosPasseioAntesProduto = 2;
     // Distancia que o NPC deve manter do produto visual para parar na frente dele.
     [SerializeField] float distanciaParadaNoProduto = 1.1f;
     // Diferenca minima de distancia para considerar que um waypoint realmente aproxima o NPC do destino.
@@ -194,6 +205,9 @@ public class SistemaCaixa : MonoBehaviour
     Pickup produtoAtual;
     Pickup produtoDestinoAtual;
     Pickup modeloProdutoAtual;
+    Pickup produtoCarregadoAtual;
+    GameObject objetoProdutoCarregadoAtual;
+    Vector3 escalaOriginalProdutoCarregadoAtual = Vector3.one;
     ConfiguracaoClienteCaixa configuracaoAtual;
 
     // Indices dos waypoints em andamento.
@@ -225,9 +239,12 @@ public class SistemaCaixa : MonoBehaviour
     Vector3 ultimoDestinoNavMesh;
     // Diz se o ultimo destino ja foi enviado ao agent durante o atendimento atual.
     bool destinoNavMeshDefinido;
+    // Posicao usada para detectar quando o NavMeshAgent ficou preso.
+    Vector3 ultimaPosicaoAgenteNavMesh;
+    // Tempo acumulado sem progresso real do agent.
+    float tempoAgenteSemProgresso;
     // Marca se a NavMesh ficou pronta para uso neste Play.
     bool navMeshPronto;
-
     // Texto digitado em centavos para a etapa do troco.
     string trocoDigitadoEmCentavos = string.Empty;
     // Mensagem base mostrada ao jogador enquanto o troco esta sendo digitado.
@@ -258,6 +275,8 @@ public class SistemaCaixa : MonoBehaviour
 
     private void Awake()
     {
+        // Awake prepara referencias e listas antes dos clientes comecarem a spawnar.
+        // Se algo essencial nao existir, o sistema desliga para evitar erro em loop.
         if (scanner == null)
         {
             scanner = Object.FindFirstObjectByType<Scanner>();
@@ -312,6 +331,7 @@ public class SistemaCaixa : MonoBehaviour
 
     private void Start()
     {
+        // Start prepara a NavMesh e inicia a rotina infinita de clientes.
         if (sistemaPronto)
         {
             // Monta a NavMesh em runtime usando as colisoes atuais da cena sem apagar nada do usuario.
@@ -322,6 +342,8 @@ public class SistemaCaixa : MonoBehaviour
 
     private void Update()
     {
+        // Update move o cliente conforme o estado atual do atendimento.
+        // Cada estado representa uma etapa: ir ao produto, ir ao caixa, aguardar scan, troco ou ir embora.
         if (!sistemaPronto)
         {
             return;
@@ -369,6 +391,7 @@ public class SistemaCaixa : MonoBehaviour
 
     IEnumerator RotinaClientes()
     {
+        // Coroutine que cria clientes continuamente enquanto o caixa estiver ativo.
         // Loop principal que cria novos clientes ao longo da partida.
         while (true)
         {
@@ -388,6 +411,7 @@ public class SistemaCaixa : MonoBehaviour
 
     void IniciarAtendimento()
     {
+        // Comeca um novo atendimento: escolhe NPC, produto, rotas e instancia o cliente.
         if (estadoAtual != EstadoCliente.AguardandoProximoCliente)
         {
             return;
@@ -406,7 +430,7 @@ public class SistemaCaixa : MonoBehaviour
         {
             // Usa a configuracao pronta quando ela estiver preenchida no Inspector.
             modeloNpcEscolhido = configuracaoAtual.npc;
-            modeloProdutoAtual = configuracaoAtual.produto;
+            modeloProdutoAtual = produtosDaLoja.Count > 0 ? SortearProdutoDaLoja() : configuracaoAtual.produto;
             PrepararRotaSaidaAtual(configuracaoAtual);
         }
         else
@@ -429,6 +453,23 @@ public class SistemaCaixa : MonoBehaviour
         {
             // Tenta montar o caminho ate o produto e depois ate o caixa sem configuracao manual.
             usandoCaminhoAutomaticoParaProduto = TentarPrepararCaminhosAutomaticosParaProduto();
+        }
+
+        if (!usandoCaminhoAutomaticoParaProduto && produtosDaLoja.Count > 0)
+        {
+            // Mesmo sem rota automatica perfeita, o cliente ainda deve tentar comprar um produto antes do caixa.
+            produtoDestinoAtual = ObterProdutoDaLojaCorrespondente(modeloProdutoAtual);
+            if (produtoDestinoAtual != null)
+            {
+                Transform pontoSpawnFallback = ObterPontoSpawnCliente();
+                Vector3 referenciaProduto = pontoSpawnFallback != null ? pontoSpawnFallback.position : produtoDestinoAtual.transform.position;
+                posicaoParadaProdutoAtual = CalcularPontoParadaNoProduto(produtoDestinoAtual, referenciaProduto);
+                possuiPosicaoParadaProdutoAtual = true;
+                caminhoProdutoAtual.Clear();
+                InserirPasseioAleatorioAntesDoProduto(referenciaProduto, posicaoParadaProdutoAtual, caminhoProdutoAtual);
+                caminhoEntradaAtual.Clear();
+                usandoCaminhoAutomaticoParaProduto = true;
+            }
         }
 
         if (!usandoCaminhoAutomaticoParaProduto)
@@ -478,6 +519,8 @@ public class SistemaCaixa : MonoBehaviour
 
     void PrepararNpcClonado(GameObject npcClonado)
     {
+        // Prepara o clone do NPC para ser controlado pelo sistema do caixa.
+        // O visual/collider original fica, mas a fisica e controlada para evitar tombos.
         if (npcClonado == null)
         {
             return;
@@ -517,9 +560,18 @@ public class SistemaCaixa : MonoBehaviour
 
     void MoverNpcPeloCaminho(List<Transform> caminhoAtual, ref int indiceWaypointAtual, Vector3 destinoFinal, EstadoCliente proximoEstado, System.Action aoChegar)
     {
+        // Move o NPC por uma lista de waypoints e depois para um destino final.
+        // Primeiro tenta usar NavMesh; se nao der, usa o fallback manual.
         if (npcAtual == null)
         {
             estadoAtual = EstadoCliente.AguardandoProximoCliente;
+            return;
+        }
+
+        if (NpcChegouPertoDoProdutoAtual())
+        {
+            estadoAtual = proximoEstado;
+            aoChegar?.Invoke();
             return;
         }
 
@@ -555,6 +607,7 @@ public class SistemaCaixa : MonoBehaviour
 
     bool MoverNpcPeloCaminhoComNavMesh(List<Transform> caminhoAtual, ref int indiceWaypointAtual, Vector3 destinoFinal, EstadoCliente proximoEstado, System.Action aoChegar)
     {
+        // Versao com NavMeshAgent, usada para o NPC navegar respeitando o bake da loja.
         if (!usarNavMesh || !navMeshPronto || agenteNpcAtual == null || !agenteNpcAtual.enabled || !agenteNpcAtual.isOnNavMesh)
         {
             return false;
@@ -569,6 +622,13 @@ public class SistemaCaixa : MonoBehaviour
         bool seguindoWaypoint = indiceWaypointAtual < caminhoAtual.Count;
         Vector3 destinoAtual = seguindoWaypoint ? caminhoAtual[indiceWaypointAtual].position : destinoFinal;
 
+        if (!seguindoWaypoint && NpcChegouPertoDoProdutoAtual())
+        {
+            estadoAtual = proximoEstado;
+            aoChegar?.Invoke();
+            return true;
+        }
+
         if (!TentarProjetarNoNavMesh(destinoAtual, out Vector3 destinoNavMesh))
         {
             if (seguindoWaypoint)
@@ -579,7 +639,14 @@ public class SistemaCaixa : MonoBehaviour
                 return true;
             }
 
-            return true;
+            if (estadoAtual == EstadoCliente.IndoAoProduto)
+            {
+                AvancarFluxoAposDestinoInacessivel(proximoEstado, aoChegar);
+                return true;
+            }
+
+            DesativarAgenteNavMeshParaFallback();
+            return false;
         }
 
         DefinirDestinoNpcNoNavMesh(destinoNavMesh);
@@ -589,18 +656,42 @@ public class SistemaCaixa : MonoBehaviour
             return true;
         }
 
-        if (agenteNpcAtual.pathStatus == NavMeshPathStatus.PathInvalid)
+        if (agenteNpcAtual.pathStatus != NavMeshPathStatus.PathComplete)
         {
             if (seguindoWaypoint)
             {
-                // Waypoint invalido nao derruba o fluxo inteiro; ele apenas sai da rota atual.
-                agenteNpcAtual.ResetPath();
-                destinoNavMeshDefinido = false;
+                ReiniciarDestinoNavMesh();
                 indiceWaypointAtual++;
                 return true;
             }
 
-            return true;
+            if (estadoAtual == EstadoCliente.IndoAoProduto)
+            {
+                AvancarFluxoAposDestinoInacessivel(proximoEstado, aoChegar);
+                return true;
+            }
+
+            DesativarAgenteNavMeshParaFallback();
+            return false;
+        }
+
+        if (AgenteNpcFicouPreso())
+        {
+            if (seguindoWaypoint)
+            {
+                ReiniciarDestinoNavMesh();
+                indiceWaypointAtual++;
+                return true;
+            }
+
+            if (estadoAtual == EstadoCliente.IndoAoProduto)
+            {
+                AvancarFluxoAposDestinoInacessivel(proximoEstado, aoChegar);
+                return true;
+            }
+
+            DesativarAgenteNavMeshParaFallback();
+            return false;
         }
 
         if (!AgenteNpcChegouAoDestino())
@@ -608,8 +699,7 @@ public class SistemaCaixa : MonoBehaviour
             return true;
         }
 
-        agenteNpcAtual.ResetPath();
-        destinoNavMeshDefinido = false;
+        ReiniciarDestinoNavMesh();
 
         if (seguindoWaypoint)
         {
@@ -621,6 +711,21 @@ public class SistemaCaixa : MonoBehaviour
         estadoAtual = proximoEstado;
         aoChegar?.Invoke();
         return true;
+    }
+
+    bool NpcChegouPertoDoProdutoAtual()
+    {
+        // Evita o NPC ficar travado tentando encostar exatamente no produto.
+        // Se ele chegou perto o bastante, considera que pegou o item.
+        if (estadoAtual != EstadoCliente.IndoAoProduto || npcAtual == null || produtoDestinoAtual == null)
+        {
+            return false;
+        }
+
+        Transform raizProduto = produtoDestinoAtual.ObterRaizProduto();
+        Vector3 posicaoProduto = raizProduto != null ? raizProduto.position : produtoDestinoAtual.transform.position;
+        float distanciaAceitavel = Mathf.Max(distanciaParadaNoProduto + raioColisaoNpc + 0.75f, 1.75f);
+        return DistanciaPlana(npcAtual.transform.position, posicaoProduto) <= distanciaAceitavel;
     }
 
     void DefinirDestinoNpcNoNavMesh(Vector3 destinoNavMesh)
@@ -636,7 +741,63 @@ public class SistemaCaixa : MonoBehaviour
             agenteNpcAtual.SetDestination(destinoNavMesh);
             ultimoDestinoNavMesh = destinoNavMesh;
             destinoNavMeshDefinido = true;
+            ultimaPosicaoAgenteNavMesh = agenteNpcAtual.transform.position;
+            tempoAgenteSemProgresso = 0f;
         }
+    }
+
+    void ReiniciarDestinoNavMesh()
+    {
+        if (agenteNpcAtual != null && agenteNpcAtual.enabled && agenteNpcAtual.isOnNavMesh)
+        {
+            agenteNpcAtual.ResetPath();
+        }
+
+        destinoNavMeshDefinido = false;
+        tempoAgenteSemProgresso = 0f;
+    }
+
+    void DesativarAgenteNavMeshParaFallback()
+    {
+        ReiniciarDestinoNavMesh();
+
+        if (agenteNpcAtual != null)
+        {
+            agenteNpcAtual.enabled = false;
+        }
+    }
+
+    bool AgenteNpcFicouPreso()
+    {
+        if (agenteNpcAtual == null || !agenteNpcAtual.enabled || !agenteNpcAtual.isOnNavMesh || !agenteNpcAtual.hasPath)
+        {
+            tempoAgenteSemProgresso = 0f;
+            return false;
+        }
+
+        float deslocamento = DistanciaPlana(agenteNpcAtual.transform.position, ultimaPosicaoAgenteNavMesh);
+        if (deslocamento > 0.03f || agenteNpcAtual.velocity.sqrMagnitude > 0.0025f)
+        {
+            ultimaPosicaoAgenteNavMesh = agenteNpcAtual.transform.position;
+            tempoAgenteSemProgresso = 0f;
+            return false;
+        }
+
+        tempoAgenteSemProgresso += Time.deltaTime;
+        return tempoAgenteSemProgresso >= 2.5f;
+    }
+
+    void AvancarFluxoAposDestinoInacessivel(EstadoCliente proximoEstado, System.Action aoChegar)
+    {
+        ReiniciarDestinoNavMesh();
+
+        if (estadoAtual == EstadoCliente.IndoAoProduto)
+        {
+            produtoDestinoAtual = null;
+        }
+
+        estadoAtual = proximoEstado;
+        aoChegar?.Invoke();
     }
 
     bool AgenteNpcChegouAoDestino()
@@ -662,6 +823,7 @@ public class SistemaCaixa : MonoBehaviour
 
     bool MoverNpcAte(Vector3 destino, float distanciaChegada)
     {
+        // Fallback de movimento manual, usado quando o NavMeshAgent nao esta disponivel.
         if (npcAtual == null)
         {
             return false;
@@ -884,8 +1046,9 @@ public class SistemaCaixa : MonoBehaviour
 
     void AoChegarNoCaixa()
     {
-        // Quando o cliente chega ao caixa, o item sorteado aparece no checkout.
-        produtoAtual = SpawnarProdutoAtual();
+        // Quando o NPC chega ao caixa, coloca o produto no checkout e pede o scan.
+        // Quando o cliente chega ao caixa, ele coloca o item que carregou no checkout.
+        produtoAtual = ColocarProdutoCarregadoNoCaixa();
 
         if (produtoAtual == null)
         {
@@ -906,7 +1069,10 @@ public class SistemaCaixa : MonoBehaviour
 
     void AoChegarNoProduto()
     {
-        if (produtoDestinoAtual != null)
+        // Quando o NPC chega perto do produto, cria o produto visual carregado e segue ao caixa.
+        CriarProdutoCarregadoPeloNpc();
+
+        if (produtoDestinoAtual != null && !EstaDentroDeInteractables(produtoDestinoAtual.ObterRaizProduto()))
         {
             // Quando o NPC chega ao produto visual da loja, ele some da prateleira.
             produtoDestinoAtual.EsconderProdutoVisualDaLoja();
@@ -948,6 +1114,7 @@ public class SistemaCaixa : MonoBehaviour
 
     void EntregarTroco()
     {
+        // Finaliza o atendimento quando o jogador digita o troco correto.
         if (goalManager != null)
         {
             // Conta o cliente como atendido e informa o valor entregue.
@@ -1058,6 +1225,8 @@ public class SistemaCaixa : MonoBehaviour
 
     void PrepararPontosDaCena()
     {
+        // Procura automaticamente objetos importantes da cena pelo nome.
+        // Isso ajuda o sistema a funcionar mesmo sem tudo ligado manualmente no Inspector.
         if (spawnNPC == null)
         {
             GameObject spawnNpcObject = GameObject.Find("SpawnNPC");
@@ -1131,6 +1300,7 @@ public class SistemaCaixa : MonoBehaviour
 
     void PrepararNavMeshDaLoja()
     {
+        // Prepara a superficie de navegacao usada pelo NPC.
         navMeshPronto = false;
 
         if (!usarNavMesh)
@@ -1173,12 +1343,12 @@ public class SistemaCaixa : MonoBehaviour
             Debug.LogWarning("SistemaCaixa encontrou a NavMeshSurface, mas ela ainda nao foi assada. Selecione a superficie e clique em Bake antes de dar Play.", superficieNavMesh);
         }
 
-        Vector3 pontoReferencia = spawnNPC != null ? spawnNPC.position : transform.position;
+        Vector3 pontoReferencia = pontoParadaCaixa != null ? pontoParadaCaixa.position : CalcularPontoParadaNoCaixa();
         navMeshPronto = TentarProjetarNoNavMesh(pontoReferencia, out _);
 
         if (!navMeshPronto)
         {
-            Debug.LogWarning("SistemaCaixa nao encontrou uma NavMesh valida perto do ponto de spawn. Confira se o chao entrou no Bake.", this);
+            Debug.LogWarning("SistemaCaixa nao encontrou uma NavMesh valida perto do caixa. Confira se o chao do mercado entrou no Bake.", this);
         }
     }
 
@@ -1246,6 +1416,7 @@ public class SistemaCaixa : MonoBehaviour
 
         if (possuiBounds)
         {
+            EncapsularPontosImportantesDaNavegacao(ref boundsMercado);
             return true;
         }
 
@@ -1269,7 +1440,38 @@ public class SistemaCaixa : MonoBehaviour
             }
         }
 
+        if (possuiBounds)
+        {
+            EncapsularPontosImportantesDaNavegacao(ref boundsMercado);
+        }
+
         return possuiBounds;
+    }
+
+    void EncapsularPontosImportantesDaNavegacao(ref Bounds boundsMercado)
+    {
+        EncapsularPontoNavMesh(ref boundsMercado, spawnNPC);
+        EncapsularPontoNavMesh(ref boundsMercado, despawnNPC);
+        EncapsularPontoNavMesh(ref boundsMercado, pontoParadaCaixa);
+        EncapsularPontoNavMesh(ref boundsMercado, spawnProduto);
+
+        if (pontosSpawn != null)
+        {
+            for (int i = 0; i < pontosSpawn.Length; i++)
+            {
+                EncapsularPontoNavMesh(ref boundsMercado, pontosSpawn[i]);
+            }
+        }
+    }
+
+    void EncapsularPontoNavMesh(ref Bounds boundsMercado, Transform ponto)
+    {
+        if (ponto == null)
+        {
+            return;
+        }
+
+        boundsMercado.Encapsulate(ponto.position);
     }
 
     Vector3 SomarMargemAoBounds(Vector3 tamanhoOriginal)
@@ -1326,7 +1528,7 @@ public class SistemaCaixa : MonoBehaviour
         agenteNpcAtual.updatePosition = true;
         agenteNpcAtual.updateRotation = true;
 
-        if (!TentarProjetarNoNavMesh(npcClonado.transform.position, out Vector3 posicaoNavMesh))
+        if (!TentarProjetarSpawnDoNpcNoNavMesh(npcClonado.transform.position, out Vector3 posicaoNavMesh))
         {
             Debug.LogWarning("SistemaCaixa nao conseguiu encaixar o NPC no NavMesh. O clone vai usar o fallback antigo.", npcClonado);
             agenteNpcAtual = null;
@@ -1354,6 +1556,24 @@ public class SistemaCaixa : MonoBehaviour
             return true;
         }
 
+        return false;
+    }
+
+    bool TentarProjetarSpawnDoNpcNoNavMesh(Vector3 posicaoDesejada, out Vector3 posicaoNavMesh)
+    {
+        if (TentarProjetarNoNavMesh(posicaoDesejada, out posicaoNavMesh))
+        {
+            return true;
+        }
+
+        float raioBuscaEntrada = Mathf.Max(raioAmostraNavMesh, 8f);
+        if (NavMesh.SamplePosition(posicaoDesejada, out NavMeshHit hitNavMesh, raioBuscaEntrada, NavMesh.AllAreas))
+        {
+            posicaoNavMesh = hitNavMesh.position;
+            return true;
+        }
+
+        posicaoNavMesh = posicaoDesejada;
         return false;
     }
 
@@ -1472,21 +1692,24 @@ public class SistemaCaixa : MonoBehaviour
             return false;
         }
 
-        // Monta um trecho automatico do spawn ate o produto escolhido.
+        posicaoParadaProdutoAtual = CalcularPontoParadaNoProduto(produtoDestinoAtual, pontoSpawn.position);
+        possuiPosicaoParadaProdutoAtual = true;
+
+        // Monta um trecho automatico do spawn ate um ponto caminhavel ao lado do produto.
         bool trechoAteProdutoValido = TentarConstruirCaminhoAutomatico(
             pontoSpawn.position,
-            produtoDestinoAtual.transform.position,
+            posicaoParadaProdutoAtual,
             caminhoProdutoAtual,
             minimoPontosAteProduto,
             maximoPontosAteProduto
         );
 
-        Vector3 referenciaAproximacao = caminhoProdutoAtual.Count > 0
-            ? caminhoProdutoAtual[caminhoProdutoAtual.Count - 1].position
-            : pontoSpawn.position;
+        if (caminhoProdutoAtual.Count > 0)
+        {
+            posicaoParadaProdutoAtual = CalcularPontoParadaNoProduto(produtoDestinoAtual, caminhoProdutoAtual[caminhoProdutoAtual.Count - 1].position);
+        }
 
-        posicaoParadaProdutoAtual = CalcularPontoParadaNoProduto(produtoDestinoAtual, referenciaAproximacao);
-        possuiPosicaoParadaProdutoAtual = true;
+        InserirPasseioAleatorioAntesDoProduto(pontoSpawn.position, posicaoParadaProdutoAtual, caminhoProdutoAtual);
 
         // Monta o segundo trecho do produto ate o caixa usando o mesmo pool de pontos.
         bool trechoAteCaixaValido = TentarConstruirCaminhoAutomatico(
@@ -1509,6 +1732,53 @@ public class SistemaCaixa : MonoBehaviour
         }
 
         return true;
+    }
+
+    void InserirPasseioAleatorioAntesDoProduto(Vector3 origem, Vector3 destinoProduto, List<Transform> caminhoDestino)
+    {
+        if (maximoPontosPasseioAntesProduto <= 0 || pontosCaminhoAutomatico.Count == 0)
+        {
+            return;
+        }
+
+        int quantidadePasseio = Random.Range(0, maximoPontosPasseioAntesProduto + 1);
+        if (quantidadePasseio <= 0)
+        {
+            return;
+        }
+
+        List<Transform> candidatos = new List<Transform>(pontosCaminhoAutomatico);
+        EmbaralharCaminho(candidatos);
+
+        List<Transform> passeio = new List<Transform>();
+        Vector3 posicaoAtual = origem;
+
+        for (int i = 0; i < candidatos.Count && passeio.Count < quantidadePasseio; i++)
+        {
+            Transform candidato = candidatos[i];
+            if (candidato == null || caminhoDestino.Contains(candidato))
+            {
+                continue;
+            }
+
+            if (!ExisteCaminhoLivreEntrePontos(posicaoAtual, candidato.position))
+            {
+                continue;
+            }
+
+            if (!ExisteCaminhoLivreEntrePontos(candidato.position, destinoProduto))
+            {
+                continue;
+            }
+
+            passeio.Add(candidato);
+            posicaoAtual = candidato.position;
+        }
+
+        for (int i = passeio.Count - 1; i >= 0; i--)
+        {
+            caminhoDestino.Insert(0, passeio[i]);
+        }
     }
 
     bool TentarUsarRotaAleatoria(RotaWaypoint[] rotas, List<Transform> destino, ref int ultimoIndiceRota)
@@ -1705,6 +1975,7 @@ public class SistemaCaixa : MonoBehaviour
 
     void PrepararModelosNpc()
     {
+        // Monta a lista de NPCs possiveis usando campos do Inspector e objetos NPC da cena.
         modelosNpc.Clear();
 
         AdicionarModeloNpc(npcCliente);
@@ -1755,12 +2026,12 @@ public class SistemaCaixa : MonoBehaviour
             }
         }
 
-        if (modelosProduto.Count == 0 && raizProdutosInteragiveis != null)
+        if (raizProdutosInteragiveis != null)
         {
             Pickup[] pickupsInteragiveis = raizProdutosInteragiveis.GetComponentsInChildren<Pickup>(true);
             for (int i = 0; i < pickupsInteragiveis.Length; i++)
             {
-                // Prioriza os itens reais guardados na raiz de interagiveis para gerar o produto do caixa.
+                // Todos os itens reais dentro de Interactables tambem viram modelos possiveis do NPC.
                 AdicionarModeloProduto(pickupsInteragiveis[i]);
             }
         }
@@ -1792,7 +2063,22 @@ public class SistemaCaixa : MonoBehaviour
 
     void PrepararProdutosDaLoja()
     {
+        // Monta a lista de produtos que os NPCs podem escolher durante a compra.
         produtosDaLoja.Clear();
+
+        if (raizProdutosInteragiveis != null)
+        {
+            Pickup[] pickupsInteragiveis = raizProdutosInteragiveis.GetComponentsInChildren<Pickup>(true);
+            for (int i = 0; i < pickupsInteragiveis.Length; i++)
+            {
+                AdicionarProdutoInteragivelDaLoja(pickupsInteragiveis[i]);
+            }
+        }
+
+        if (produtosDaLoja.Count > 0)
+        {
+            return;
+        }
 
         if (raizProdutosVisuaisLoja != null)
         {
@@ -1821,6 +2107,7 @@ public class SistemaCaixa : MonoBehaviour
 
             if (EstaDentroDeInteractables(pickupDaLoja.transform))
             {
+                AdicionarProdutoInteragivelDaLoja(pickupDaLoja);
                 continue;
             }
 
@@ -1844,6 +2131,22 @@ public class SistemaCaixa : MonoBehaviour
         pickupDaLoja.ConfigurarComoProdutoVisualDaLoja(pickupDaLoja.ObterRaizProduto());
 
         if (!produtosDaLoja.Contains(pickupDaLoja))
+        {
+            produtosDaLoja.Add(pickupDaLoja);
+        }
+    }
+
+    void AdicionarProdutoInteragivelDaLoja(Pickup pickupDaLoja)
+    {
+        if (pickupDaLoja == null)
+        {
+            return;
+        }
+
+        // Interactables continuam clicaveis pelo jogador, mas tambem servem de alvo para o NPC.
+        pickupDaLoja.ConfigurarComoProdutoDaLojaInteragivel(pickupDaLoja.ObterRaizProduto());
+
+        if (!ProdutoJaEstaNaListaDaLoja(pickupDaLoja))
         {
             produtosDaLoja.Add(pickupDaLoja);
         }
@@ -1881,7 +2184,7 @@ public class SistemaCaixa : MonoBehaviour
 
     void AdicionarModeloProduto(Pickup modelo)
     {
-        if (modelo == null || modelosProduto.Contains(modelo))
+        if (modelo == null || ProdutoJaEstaNaListaDeModelos(modelo))
         {
             return;
         }
@@ -1915,6 +2218,11 @@ public class SistemaCaixa : MonoBehaviour
 
     Pickup ObterProdutoDoNpc(int indiceNpc)
     {
+        if (produtosDaLoja.Count > 0)
+        {
+            return SortearProdutoDaLoja();
+        }
+
         if (modelosProduto.Count == 0)
         {
             return SortearProdutoDaLoja();
@@ -1951,6 +2259,7 @@ public class SistemaCaixa : MonoBehaviour
 
     Pickup SortearProdutoDaLoja()
     {
+        // Sorteia um produto disponivel da loja para o cliente comprar.
         List<Pickup> produtosDisponiveis = new List<Pickup>();
 
         for (int i = 0; i < produtosDaLoja.Count; i++)
@@ -1967,9 +2276,15 @@ public class SistemaCaixa : MonoBehaviour
             return null;
         }
 
-        OrdenarProdutosPorProximidadeDoCaixa(produtosDisponiveis);
+        bool usandoInteractables = ExistemProdutosInteragiveis(produtosDisponiveis);
+        if (!usandoInteractables)
+        {
+            OrdenarProdutosPorProximidadeDoCaixa(produtosDisponiveis);
+        }
 
-        int quantidadeConsiderada = Mathf.Clamp(quantidadeProdutosMaisProximos, 1, produtosDisponiveis.Count);
+        int quantidadeConsiderada = usandoInteractables
+            ? produtosDisponiveis.Count
+            : Mathf.Clamp(quantidadeProdutosMaisProximos, 1, produtosDisponiveis.Count);
         return produtosDisponiveis[Random.Range(0, quantidadeConsiderada)];
     }
 
@@ -1984,8 +2299,157 @@ public class SistemaCaixa : MonoBehaviour
         return CriarCopiaDoProdutoNoCaixa(modeloProdutoAtual);
     }
 
+    void CriarProdutoCarregadoPeloNpc()
+    {
+        // Cria uma copia visual do produto para parecer que o NPC esta carregando o item.
+        if (npcAtual == null || produtoCarregadoAtual != null)
+        {
+            return;
+        }
+
+        Pickup produtoBase = produtoDestinoAtual != null ? produtoDestinoAtual : modeloProdutoAtual;
+        Transform raizModelo = produtoBase != null ? produtoBase.ObterRaizProduto() : null;
+        if (raizModelo == null)
+        {
+            return;
+        }
+
+        escalaOriginalProdutoCarregadoAtual = raizModelo.localScale;
+
+        GameObject novoObjeto = Instantiate(raizModelo.gameObject);
+        novoObjeto.name = raizModelo.name + "_CarregadoNPC";
+        novoObjeto.SetActive(true);
+        AtivarObjetoInteiro(novoObjeto.transform);
+
+        Transform pontoCarregar = ObterPontoCarregarProdutoNpc();
+        novoObjeto.transform.SetParent(pontoCarregar, false);
+        novoObjeto.transform.localPosition = offsetProdutoCarregadoNpc;
+        novoObjeto.transform.localRotation = Quaternion.identity;
+        novoObjeto.transform.localScale = escalaOriginalProdutoCarregadoAtual;
+        RedimensionarProdutoCarregado(novoObjeto.transform);
+
+        produtoCarregadoAtual = novoObjeto.GetComponentInChildren<Pickup>(true);
+        if (produtoCarregadoAtual != null)
+        {
+            produtoCarregadoAtual.ConfigurarComoProdutoDoCaixa(novoObjeto.transform);
+            produtoCarregadoAtual.IgnorarScannerPorSegundos(9999f);
+        }
+
+        AjustarProdutoCarregadoVisual(novoObjeto.transform);
+        objetoProdutoCarregadoAtual = novoObjeto;
+    }
+
+    Transform ObterPontoCarregarProdutoNpc()
+    {
+        return npcAtual != null ? npcAtual.transform : transform;
+    }
+
+    void AjustarProdutoCarregadoVisual(Transform raiz)
+    {
+        if (raiz == null)
+        {
+            return;
+        }
+
+        Collider[] colliders = raiz.GetComponentsInChildren<Collider>(true);
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            colliders[i].enabled = false;
+        }
+
+        Rigidbody[] rigidbodies = raiz.GetComponentsInChildren<Rigidbody>(true);
+        for (int i = 0; i < rigidbodies.Length; i++)
+        {
+            rigidbodies[i].linearVelocity = Vector3.zero;
+            rigidbodies[i].angularVelocity = Vector3.zero;
+            rigidbodies[i].isKinematic = true;
+            rigidbodies[i].useGravity = false;
+            rigidbodies[i].detectCollisions = false;
+        }
+    }
+
+    Pickup ColocarProdutoCarregadoNoCaixa()
+    {
+        // Move o produto que o NPC estava carregando para o ponto do checkout.
+        if (produtoCarregadoAtual == null || objetoProdutoCarregadoAtual == null)
+        {
+            return SpawnarProdutoAtual();
+        }
+
+        objetoProdutoCarregadoAtual.transform.SetParent(null);
+        objetoProdutoCarregadoAtual.transform.position = CalcularPosicaoSpawnProdutoNoCaixa();
+        objetoProdutoCarregadoAtual.transform.rotation = spawnProduto != null ? spawnProduto.rotation : Quaternion.identity;
+        objetoProdutoCarregadoAtual.transform.localScale = escalaOriginalProdutoCarregadoAtual;
+
+        AtivarObjetoInteiro(objetoProdutoCarregadoAtual.transform);
+        produtoCarregadoAtual.ConfigurarComoProdutoDoCaixa(objetoProdutoCarregadoAtual.transform);
+        produtoCarregadoAtual.IgnorarScannerPorSegundos(tempoIgnorarScannerAoSpawnar);
+        AjustarFisicaDoProdutoClonado(objetoProdutoCarregadoAtual.transform, produtoCarregadoAtual);
+
+        Pickup produtoNoCaixa = produtoCarregadoAtual;
+        produtoCarregadoAtual = null;
+        objetoProdutoCarregadoAtual = null;
+        escalaOriginalProdutoCarregadoAtual = Vector3.one;
+        return produtoNoCaixa;
+    }
+
+    void RedimensionarProdutoCarregado(Transform raiz)
+    {
+        if (raiz == null)
+        {
+            return;
+        }
+
+        float escalaBase = Mathf.Clamp(escalaProdutoCarregadoNpc, 0.05f, 1f);
+        raiz.localScale = escalaOriginalProdutoCarregadoAtual * escalaBase;
+
+        Bounds boundsProduto;
+        if (!TentarObterBoundsRenderers(raiz, out boundsProduto))
+        {
+            return;
+        }
+
+        float maiorEixo = Mathf.Max(boundsProduto.size.x, boundsProduto.size.y, boundsProduto.size.z);
+        if (maiorEixo <= tamanhoMaximoProdutoCarregadoNpc || maiorEixo <= 0.0001f)
+        {
+            return;
+        }
+
+        float fatorReducao = tamanhoMaximoProdutoCarregadoNpc / maiorEixo;
+        raiz.localScale *= fatorReducao;
+    }
+
+    bool TentarObterBoundsRenderers(Transform raiz, out Bounds boundsProduto)
+    {
+        boundsProduto = new Bounds(raiz.position, Vector3.zero);
+        Renderer[] renderers = raiz.GetComponentsInChildren<Renderer>(true);
+        bool encontrouRenderer = false;
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer rendererAtual = renderers[i];
+            if (rendererAtual == null || !rendererAtual.enabled)
+            {
+                continue;
+            }
+
+            if (!encontrouRenderer)
+            {
+                boundsProduto = rendererAtual.bounds;
+                encontrouRenderer = true;
+            }
+            else
+            {
+                boundsProduto.Encapsulate(rendererAtual.bounds);
+            }
+        }
+
+        return encontrouRenderer;
+    }
+
     Pickup CriarCopiaDoProdutoNoCaixa(Pickup produtoBase)
     {
+        // Fallback: cria o produto diretamente no caixa quando nao existe item carregado.
         Transform raizModelo = produtoBase.ObterRaizProduto();
         if (raizModelo == null)
         {
@@ -2314,6 +2778,11 @@ public class SistemaCaixa : MonoBehaviour
             return false;
         }
 
+        if (raizProdutosInteragiveis != null && raizProduto.IsChildOf(raizProdutosInteragiveis))
+        {
+            return true;
+        }
+
         if (raizProdutosAtendimentoNpc != null && !raizProduto.IsChildOf(raizProdutosAtendimentoNpc))
         {
             // Se existir uma raiz dedicada ao atendimento, o NPC so escolhe produto dali.
@@ -2322,10 +2791,29 @@ public class SistemaCaixa : MonoBehaviour
 
         if (!limitarProdutosPelaDistanciaAoCaixa)
         {
+            return ProdutoTemRotaCompletaPeloNavMesh(produtoDaLoja);
+        }
+
+        return DistanciaPlana(raizProduto.position, CalcularPontoParadaNoCaixa()) <= distanciaMaximaProdutoDoCaixa
+            && ProdutoTemRotaCompletaPeloNavMesh(produtoDaLoja);
+    }
+
+    bool ProdutoTemRotaCompletaPeloNavMesh(Pickup produtoDaLoja)
+    {
+        if (!usarNavMesh || !navMeshPronto)
+        {
             return true;
         }
 
-        return DistanciaPlana(raizProduto.position, CalcularPontoParadaNoCaixa()) <= distanciaMaximaProdutoDoCaixa;
+        Transform pontoSpawn = ObterPontoSpawnCliente();
+        if (pontoSpawn == null || produtoDaLoja == null)
+        {
+            return false;
+        }
+
+        Vector3 pontoProduto = CalcularPontoParadaNoProduto(produtoDaLoja, pontoSpawn.position);
+        return ExisteCaminhoNavMeshEntrePontos(pontoSpawn.position, pontoProduto)
+            && ExisteCaminhoNavMeshEntrePontos(pontoProduto, CalcularPontoParadaNoCaixa());
     }
 
     void OrdenarProdutosPorProximidadeDoCaixa(List<Pickup> produtosOrdenados)
@@ -2361,6 +2849,65 @@ public class SistemaCaixa : MonoBehaviour
     bool EstaDentroDeInteractables(Transform item)
     {
         return raizProdutosInteragiveis != null && item != null && item.IsChildOf(raizProdutosInteragiveis);
+    }
+
+    bool ProdutoJaEstaNaListaDaLoja(Pickup produto)
+    {
+        if (produto == null)
+        {
+            return true;
+        }
+
+        Transform raizProduto = produto.ObterRaizProduto();
+        for (int i = 0; i < produtosDaLoja.Count; i++)
+        {
+            Pickup produtoExistente = produtosDaLoja[i];
+            if (produtoExistente == null)
+            {
+                continue;
+            }
+
+            if (produtoExistente == produto || produtoExistente.ObterRaizProduto() == raizProduto)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool ProdutoJaEstaNaListaDeModelos(Pickup produto)
+    {
+        Transform raizProduto = produto.ObterRaizProduto();
+        for (int i = 0; i < modelosProduto.Count; i++)
+        {
+            Pickup produtoExistente = modelosProduto[i];
+            if (produtoExistente == null)
+            {
+                continue;
+            }
+
+            if (produtoExistente == produto || produtoExistente.ObterRaizProduto() == raizProduto)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool ExistemProdutosInteragiveis(List<Pickup> produtos)
+    {
+        for (int i = 0; i < produtos.Count; i++)
+        {
+            Pickup produto = produtos[i];
+            if (produto != null && EstaDentroDeInteractables(produto.ObterRaizProduto()))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     bool EstaDentroDosProdutosVisuaisDaLoja(Transform item)
@@ -2430,6 +2977,7 @@ public class SistemaCaixa : MonoBehaviour
 
     void LimparAtendimentoAtual()
     {
+        // Remove sobras do atendimento atual antes de iniciar outro cliente.
         if (agenteNpcAtual != null && agenteNpcAtual.enabled && agenteNpcAtual.isOnNavMesh)
         {
             // Interrompe o deslocamento atual antes de destruir o clone.
@@ -2448,6 +2996,13 @@ public class SistemaCaixa : MonoBehaviour
             Transform raizProdutoAtual = produtoAtual.ObterRaizProduto();
             Destroy(raizProdutoAtual != null ? raizProdutoAtual.gameObject : produtoAtual.gameObject);
             produtoAtual = null;
+        }
+
+        if (objetoProdutoCarregadoAtual != null)
+        {
+            Destroy(objetoProdutoCarregadoAtual);
+            objetoProdutoCarregadoAtual = null;
+            produtoCarregadoAtual = null;
         }
 
         trocoDigitadoEmCentavos = string.Empty;

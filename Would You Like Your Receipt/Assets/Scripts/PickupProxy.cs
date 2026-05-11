@@ -2,11 +2,14 @@ using UnityEngine;
 
 public class PickupProxy : MonoBehaviour
 {
+    // Este script fica em colliders filhos de um produto.
+    // Ele encaminha o clique para o Pickup principal da raiz, evitando que partes do modelo nao sejam clicaveis.
     // Referencia para o Pickup principal do produto que deve reagir ao clique.
     [SerializeField] Pickup pickupPrincipal;
 
     private void Awake()
     {
+        // Se ninguem configurou o proxy, tenta descobrir automaticamente o Pickup pai.
         if (pickupPrincipal == null)
         {
             // Recupera o Pickup na hierarquia caso o campo ainda nao tenha sido ligado.

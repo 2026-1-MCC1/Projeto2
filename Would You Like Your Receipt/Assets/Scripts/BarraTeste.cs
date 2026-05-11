@@ -3,6 +3,8 @@ using UnityEngine.UI;
 
 public class BarraTeste : MonoBehaviour
 {
+    // Este script e uma barra de progresso simples usada pelo scanner.
+    // Ele foi mantido separado para nao misturar a UI antiga da barra com a logica principal do Scanner.
     // Script auxiliar que atualiza uma barra visual sempre que o scanner conta um item.
     // Imagem de UI preenchida para representar o progresso.
     public Image barra;
@@ -14,6 +16,7 @@ public class BarraTeste : MonoBehaviour
 
     private void Update()
     {
+        // Se a imagem da barra nao foi ligada no Inspector, o script para aqui para evitar erro.
         if (barra == null)
         {
             return;

@@ -2,6 +2,8 @@
 
 public class PlayerMovement : MonoBehaviour
 {
+    // Este script move o jogador no mundo usando WASD/eixos de input.
+    // A rotacao vem da camera, e este script cuida apenas do deslocamento.
     // Script principal de locomocao do jogador.
     // Velocidade de deslocamento do jogador.
     public float speed = 3f;
@@ -12,6 +14,8 @@ public class PlayerMovement : MonoBehaviour
 
     private void Awake()
     {
+        // Antes do jogo rodar, tenta encontrar o console de cameras.
+        // Isso permite pausar o movimento quando o jogador abre as cameras.
         if (console == null)
         {
             // Procura automaticamente o CameraConsole caso o campo nao tenha sido ligado no Inspector.

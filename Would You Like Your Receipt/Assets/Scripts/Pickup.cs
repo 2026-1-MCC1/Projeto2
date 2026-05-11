@@ -3,13 +3,15 @@ using UnityEngine;
 
 public class Pickup : MonoBehaviour
 {
+    // Este script controla produtos que o jogador pode pegar, arrastar, arremessar e escanear.
+    // Ele tambem guarda informacoes do produto, como nome, codigo, preco e descricao.
     // Raiz opcional do produto completo. Use quando o Pickup estiver em um child do modelo.
     [SerializeField] Transform produtoCompletoRoot;
 
     // Forca aplicada quando o jogador arremessa o produto.
     [SerializeField] float throwForce = 150f;
     // Distancia maxima para pegar ou continuar segurando o produto.
-    [SerializeField] float maxDistance = 3f;
+    [SerializeField] float maxDistance = 4.5f;
     // Nome exibido na tela quando o produto for escaneado.
     [SerializeField] string nomeProduto = "";
     // Codigo opcional do produto.
@@ -24,7 +26,8 @@ public class Pickup : MonoBehaviour
     [SerializeField] string mensagemEscaneamento = "";
     // Tempo padrao de exibicao da mensagem do produto.
     [SerializeField] float duracaoMensagemEscaneamento = 2f;
-
+    // Mantem os produtos da prateleira parados sem trocar collider, trigger ou formato.
+    [SerializeField] bool iniciarTravadoNaPrateleira = true;
     // Permite selecionar o console de cameras no Inspector.
     public CameraConsole console;
 
@@ -52,6 +55,7 @@ public class Pickup : MonoBehaviour
 
     private void Awake()
     {
+        // Awake roda antes do Start e garante que a raiz do produto ja esteja resolvida.
         // Resolve a raiz logo no inicio para os outros sistemas usarem a hierarquia correta.
         raizProduto = ResolverRaizProduto();
     }
@@ -61,6 +65,11 @@ public class Pickup : MonoBehaviour
         // Busca as referencias locais usadas no fluxo de pegar e soltar.
         rb = ObterRigidbodyDoProduto();
         tempParent = TempParent.Instance;
+
+        if (iniciarTravadoNaPrateleira && !produtoDoCaixa)
+        {
+            TravarFisicaSemAlterarColisao();
+        }
 
         if (console == null)
         {
@@ -76,6 +85,7 @@ public class Pickup : MonoBehaviour
 
     private void Update()
     {
+        // Enquanto o jogador segura o item, o objeto segue o ponto TempParent.
         // Mantem a logica de arraste ativa apenas enquanto o jogador segura o item.
         if (estaSegurando)
         {
@@ -102,6 +112,8 @@ public class Pickup : MonoBehaviour
 
     public void IniciarSegurarPeloProxy()
     {
+        // Entrada principal para pegar um produto.
+        // Pode ser chamada pelo proprio objeto ou por um PickupProxy em collider filho.
         if (!permiteInteracaoJogador)
         {
             return;
@@ -120,7 +132,7 @@ public class Pickup : MonoBehaviour
         }
 
         // So permite pegar o item quando ele estiver perto o bastante da mao do jogador.
-        float distance = Vector3.Distance(raiz.position, tempParent.transform.position);
+        float distance = CalcularMenorDistanciaAteMao(raiz);
         if (distance > maxDistance)
         {
             return;
@@ -156,6 +168,8 @@ public class Pickup : MonoBehaviour
 
     public bool TentarIniciarEscaneamento()
     {
+        // O scanner chama esta funcao antes de contar o produto.
+        // Ela impede leitura duplicada e bloqueia itens que ainda nao estao liberados.
         if (!permiteInteracaoJogador)
         {
             return false;
@@ -223,6 +237,7 @@ public class Pickup : MonoBehaviour
 
     public void ConfigurarComoProdutoDoCaixa(Transform raizCompleta)
     {
+        // Configura clones que aparecem no caixa ou sao carregados pelo NPC.
         // Marca o clone como item de checkout e reseta os estados de leitura.
         produtoCompletoRoot = raizCompleta != null ? raizCompleta : produtoCompletoRoot;
         raizProduto = ResolverRaizProduto();
@@ -236,6 +251,7 @@ public class Pickup : MonoBehaviour
 
     public void ConfigurarComoProdutoVisualDaLoja(Transform raizCompleta)
     {
+        // Configura produtos decorativos da loja que o NPC pode visitar, mas o jogador nao pega diretamente.
         // Mantem o item visivel na loja, mas sem permitir pegar ou escanear antes do caixa.
         produtoCompletoRoot = raizCompleta != null ? raizCompleta : produtoCompletoRoot;
         raizProduto = ResolverRaizProduto();
@@ -252,6 +268,35 @@ public class Pickup : MonoBehaviour
             // Produto visual da loja fica parado, sem gravidade, ate o NPC "retira-lo" da prateleira.
             PrepararRigidbodyKinematico();
         }
+    }
+
+    public void ConfigurarComoProdutoDaLojaInteragivel(Transform raizCompleta)
+    {
+        // Configura produtos dentro de Interactables.
+        // Eles continuam clicaveis pelo jogador e tambem podem ser escolhidos pelo NPC.
+        // Mantem o produto como alvo da loja sem bloquear o clique do jogador.
+        produtoCompletoRoot = raizCompleta != null ? raizCompleta : produtoCompletoRoot;
+        raizProduto = ResolverRaizProduto();
+        rb = ObterRigidbodyDoProduto();
+        produtoDoCaixa = false;
+        produtoVisualDaLoja = false;
+        permiteInteracaoJogador = true;
+        foiEscaneado = false;
+        estaSegurando = false;
+        travadoNoCaixa = false;
+
+        TravarFisicaSemAlterarColisao();
+    }
+
+    public void LiberarInteracaoDaLoja(Transform raizCompleta)
+    {
+        produtoCompletoRoot = raizCompleta != null ? raizCompleta : produtoCompletoRoot;
+        raizProduto = ResolverRaizProduto();
+        rb = ObterRigidbodyDoProduto();
+        produtoDoCaixa = false;
+        produtoVisualDaLoja = false;
+        permiteInteracaoJogador = true;
+        travadoNoCaixa = false;
     }
 
     public void EsconderProdutoVisualDaLoja()
@@ -286,6 +331,7 @@ public class Pickup : MonoBehaviour
 
     public string ObterMensagemEscaneamento()
     {
+        // Monta a mensagem completa que aparece na UI do scanner quando o produto e lido.
         // Monta o texto completo com os dados do item para o Canvas do scanner.
         string mensagem = "Produto: " + ObterNomeProduto();
 
@@ -348,6 +394,7 @@ public class Pickup : MonoBehaviour
 
     private void Segurar()
     {
+        // Mantem o item preso na mao do jogador e verifica se ele deve soltar.
         if (tempParent == null)
         {
             Soltar();
@@ -398,6 +445,7 @@ public class Pickup : MonoBehaviour
 
     private void Soltar()
     {
+        // Devolve o item para o mundo fisico quando o jogador solta o mouse.
         if (!estaSegurando)
         {
             return;
@@ -421,6 +469,8 @@ public class Pickup : MonoBehaviour
 
     private Transform ResolverRaizProduto()
     {
+        // Define qual Transform representa o produto inteiro.
+        // Isso e importante para modelos com varios filhos e colliders separados.
         // Quando uma raiz foi definida manualmente, ela sempre vence.
         if (produtoCompletoRoot != null)
         {
@@ -444,8 +494,46 @@ public class Pickup : MonoBehaviour
         return rigidbodyRaiz != null ? rigidbodyRaiz : raiz.GetComponentInChildren<Rigidbody>();
     }
 
+    float CalcularMenorDistanciaAteMao(Transform raiz)
+    {
+        // Usa os colliders do produto para calcular uma distancia mais justa ate a mao.
+        // Assim produtos grandes podem ser pegos pela borda, nao apenas pelo centro.
+        if (tempParent == null)
+        {
+            return float.MaxValue;
+        }
+
+        Vector3 pontoMao = tempParent.transform.position;
+        float menorDistancia = raiz != null ? Vector3.Distance(raiz.position, pontoMao) : float.MaxValue;
+
+        if (raiz == null)
+        {
+            return menorDistancia;
+        }
+
+        Collider[] colliders = raiz.GetComponentsInChildren<Collider>(true);
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            Collider colliderAtual = colliders[i];
+            if (colliderAtual == null || !colliderAtual.enabled)
+            {
+                continue;
+            }
+
+            Vector3 pontoMaisProximo = colliderAtual.ClosestPoint(pontoMao);
+            float distanciaCollider = Vector3.Distance(pontoMaisProximo, pontoMao);
+            if (distanciaCollider < menorDistancia)
+            {
+                menorDistancia = distanciaCollider;
+            }
+        }
+
+        return menorDistancia;
+    }
+
     void PrepararRigidbodyKinematico()
     {
+        // Trava o Rigidbody para o item ficar parado no caixa ou na prateleira.
         if (rb == null)
         {
             return;
@@ -454,6 +542,25 @@ public class Pickup : MonoBehaviour
         if (!rb.isKinematic)
         {
             // Zera a fisica antes de travar o corpo para evitar warnings da Unity.
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
+
+        rb.isKinematic = true;
+        rb.useGravity = false;
+        rb.detectCollisions = true;
+    }
+
+    void TravarFisicaSemAlterarColisao()
+    {
+        // Mantem o produto parado sem mudar formato, trigger ou tamanho dos colliders.
+        if (rb == null)
+        {
+            return;
+        }
+
+        if (!rb.isKinematic)
+        {
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }

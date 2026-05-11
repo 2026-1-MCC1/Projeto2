@@ -7,13 +7,16 @@ using UnityEditor.SceneManagement;
 [ExecuteAlways]
 public class ConfiguradorInteractables : MonoBehaviour
 {
+    // Este script prepara automaticamente os produtos dentro do objeto Interactables.
+    // Ele garante Pickup e PickupProxy para o jogador conseguir clicar nos produtos.
+    // A ideia e configurar interacao sem destruir o setup visual feito na cena.
     // Define se a configuracao deve acontecer automaticamente ao carregar ou mudar a hierarquia.
     [SerializeField] bool configurarAutomaticamente = true;
     // Inclui filhos desligados para que objetos importados tambem recebam configuracao completa.
     [SerializeField] bool incluirFilhosInativos = true;
-    // Mantem os produtos-base presos no lugar para servirem apenas como molde do item do caixa.
+    // Mantem os colliders que ja existem exatamente como estao.
+    [SerializeField] bool preservarCollidersOriginais = true;
     [SerializeField] bool manterProdutosBaseParados = true;
-    // Usa gravidade apenas quando voce realmente quiser que os produtos-base da hierarquia caiam na cena.
     [SerializeField] bool usarGravidadeNosProdutosBase = false;
 
     private void OnEnable()
@@ -37,6 +40,8 @@ public class ConfiguradorInteractables : MonoBehaviour
     [ContextMenu("Configurar Interactables")]
     public void ConfigurarInteractables()
     {
+        // Percorre cada produto filho direto de Interactables.
+        // Cada filho e tratado como um produto completo.
         bool houveMudanca = false;
 
         for (int i = 0; i < transform.childCount; i++)
@@ -57,6 +62,7 @@ public class ConfiguradorInteractables : MonoBehaviour
 
             // Marca explicitamente qual Transform representa o produto inteiro.
             pickupPrincipal.DefinirRaizDoProduto(raizProduto);
+            pickupPrincipal.LiberarInteracaoDaLoja(raizProduto);
 
             Collider[] colliders = GarantirCollidersDoProduto(raizProduto, ref houveMudanca);
             GarantirRigidbodyDoProduto(raizProduto, ref houveMudanca);
@@ -92,6 +98,7 @@ public class ConfiguradorInteractables : MonoBehaviour
 
     void TentarConfigurar()
     {
+        // Decide se a configuracao automatica deve rodar no editor ou no Play.
         if (!configurarAutomaticamente && !Application.isPlaying)
         {
             return;
@@ -103,8 +110,10 @@ public class ConfiguradorInteractables : MonoBehaviour
 
     Collider[] GarantirCollidersDoProduto(Transform raizProduto, ref bool houveMudanca)
     {
+        // Garante colliders apenas se o modo de preservar colliders estiver desligado.
+        // Por padrao, preserva os colliders originais para nao quebrar a cena.
         Collider[] colliders = raizProduto.GetComponentsInChildren<Collider>(incluirFilhosInativos);
-        if (colliders.Length == 0)
+        if (colliders.Length == 0 && !preservarCollidersOriginais)
         {
             Renderer[] renderers = raizProduto.GetComponentsInChildren<Renderer>(incluirFilhosInativos);
             for (int i = 0; i < renderers.Length; i++)
@@ -135,21 +144,13 @@ public class ConfiguradorInteractables : MonoBehaviour
             }
         }
 
-        for (int i = 0; i < colliders.Length; i++)
-        {
-            if (colliders[i] != null)
-            {
-                // Mantem os colliders ativos e fisicos para os itens responderem ao mundo.
-                colliders[i].enabled = true;
-                colliders[i].isTrigger = false;
-            }
-        }
-
         return colliders;
     }
 
     void GarantirRigidbodyDoProduto(Transform raizProduto, ref bool houveMudanca)
     {
+        // Garante um Rigidbody principal para o produto responder ao sistema de pickup.
+        // O Rigidbody pode ficar kinematic para o item nao cair sozinho da prateleira.
         Rigidbody rigidbodyPrincipal = raizProduto.GetComponent<Rigidbody>();
         if (rigidbodyPrincipal == null)
         {

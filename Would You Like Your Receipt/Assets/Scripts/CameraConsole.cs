@@ -2,6 +2,8 @@ using UnityEngine;
 
 public class CameraConsole : MonoBehaviour
 {
+    // Este script controla o sistema de cameras de seguranca.
+    // Ele alterna entre a camera principal do jogador e as cameras cadastradas no Inspector.
     // Lista de cameras de seguranca que podem ser vistas pelo console.
     public GameObject[] Cameras;
     // Indice da camera atualmente selecionada.
@@ -19,6 +21,8 @@ public class CameraConsole : MonoBehaviour
 
     private void Start()
     {
+        // No inicio, todas as cameras de seguranca ficam desligadas.
+        // Assim o jogador sempre comeca vendo pela camera principal.
         // Desliga todas as cameras secundarias e deixa apenas a visao principal ligada.
         DesativarTodasAsCameras();
 
@@ -30,6 +34,7 @@ public class CameraConsole : MonoBehaviour
 
     private void Update()
     {
+        // O Update verifica input a cada frame, porque abrir e trocar cameras depende do teclado.
         // Abre ou fecha a tela de cameras.
         if (Input.GetKeyDown(OpenCameras))
         {
@@ -63,6 +68,7 @@ public class CameraConsole : MonoBehaviour
 
     private void ShowCamera()
     {
+        // Esta funcao centraliza o que acontece ao abrir ou fechar o console de cameras.
         // Sem cameras configuradas, apenas garante que a camera principal fique ativa.
         if (Cameras == null || Cameras.Length == 0)
         {
@@ -106,6 +112,8 @@ public class CameraConsole : MonoBehaviour
 
     public void GoToCamera(int progression)
     {
+        // Troca a camera atual usando um indice novo.
+        // O modulo circular permite ir da ultima camera para a primeira, e vice-versa.
         if (Cameras == null || Cameras.Length == 0)
         {
             return;
@@ -124,6 +132,7 @@ public class CameraConsole : MonoBehaviour
 
     private void DesativarTodasAsCameras()
     {
+        // Desativa todas as cameras secundarias para impedir que duas fiquem renderizando juntas.
         if (Cameras == null)
         {
             return;
