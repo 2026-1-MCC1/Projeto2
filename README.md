@@ -75,9 +75,30 @@ npm test
 Coloque código do prompt de comnando se for necessário
 ```
 
-## 📋 Licença/License
-<a href="https://github.com/2026-1-MCC1/Projeto2">Would You Like Your Receipt?</a> © 2026 by <a href="https://github.com/M0ntesP, https://github.com/Krentell, https://github.com/Pihetra013>Guilherme da Silva Montes, Kris Pascali Janjiulio, Pietra Augusto Farias Ruiz, FECAP </a> is licensed under <"https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a><img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;"><img src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt="" style="max-width: 1em;max-height:1em;margin-left: .2em;">
+## 📋 Licença / License
 
+<a href="https://github.com/2026-1-MCC1/Projeto2">
+Would You Like Your Receipt?
+</a> © 2026 by
+
+<a href="https://github.com/M0ntesP">Guilherme da Silva Montes</a>,
+<a href="https://github.com/Krentell">Kris Pascali Janjiulio</a>,
+<a href="https://github.com/Pihetra013">Pietra Augusto Farias Ruiz</a>,
+FECAP
+
+is licensed under
+
+<a href="https://creativecommons.org/licenses/by/4.0/">
+CC BY 4.0
+</a>
+
+<img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg"
+alt="CC"
+style="max-width: 1em; max-height:1em; margin-left: .2em;">
+
+<img src="https://mirrors.creativecommons.org/presskit/icons/by.svg"
+alt="BY"
+style="max-width: 1em; max-height:1em; margin-left: .2em;">
 ## 🎓 Referências
 
 Aqui estão as referências usadas no projeto.
