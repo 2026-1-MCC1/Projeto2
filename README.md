@@ -13,8 +13,8 @@
 ## Descrição
 
 <p align="center">
-<img src="<img width="1920" [height="1080" alt="WOULD YOU LIKE YOUR RECEIPT" src="https://github.com/user-attachments/assets/022028cb-c045-4f2e-be5d-b4056a8a88d4](https://github.com/2026-1-MCC1/Projeto2/blob/main/imagens/WOULD%20YOU%20LIKE%20YOUR%20RECEIPT.png)" />
-alt="Would you like your receipt?"
+<img src= "https://github.com/2026-1-MCC1/Projeto2/blob/main/imagens/WOULD%20YOU%20LIKE%20YOUR%20RECEIPT.png" width="700">
+  
   Game by <a href="https://www.linkedin.com/in/guilherme-montes-640a37367">Guilherme da Silva Montes</a>, <a href="https://www.linkedin.com/in/kris-janjiulio-6152363b7/">Kris Pascali Janjiulio</a>, <a href="https://www.linkedin.com/in/pietra-ruiz-57b7643b3?/">Pietra Augusto Farias Ruiz</a> <a rel="license" href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a> <a href="http://pix4free.org/">Pix4free</a>
 </p>
 
