@@ -11,10 +11,9 @@ public class Menu : MonoBehaviour
     [TextArea(3, 8)]
     [SerializeField] string textoCreditos =
         "Créditos\n\n" +
-        "Jogo criado por: SEU NOME AQUI\n" +
-        "Programação: SEU NOME AQUI\n" +
-        "Arte e modelos: CREDITOS AQUI\n" +
-        "Música e efeitos: CREDITOS AQUI";
+        "Jogo criado por: Guilherme da Silva Montes, Kris Pascali Janjiulio, Pietra Augusto Farias Ruiz." +
+        "Arte e modelos: Skechtfab, Itch.io, Canva" +
+        "Professores: Victor Bruno Alexander Rosetti de Quiroz, Adriando Felix Valente, Renata Muniz de Nascimento, Eduardo Savino Gomes, Luis Fernando dos Santos Pires";
 
     [TextArea(3, 8)]
     [SerializeField] string textoComoJogar =

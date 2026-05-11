@@ -9173,9 +9173,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 183586194}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: Batata BBQ
+  codigoProduto: LAY-153
+  precoProduto: 15
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -9780,9 +9780,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 188442950}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: "\xC1lcool"
+  codigoProduto: ALC-109
+  precoProduto: 13.5
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -10503,96 +10503,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 199564022}
   m_Mesh: {fileID: 4007800882476559316, guid: 8499e52655ca21f488a1d2e8a9618626, type: 3}
---- !u!1 &200901374
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 200901375}
-  - component: {fileID: 200901377}
-  - component: {fileID: 200901376}
-  m_Layer: 0
-  m_Name: WC-Cleaner_Material.002_0
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &200901375
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 200901374}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1735378256}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!23 &200901376
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 200901374}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: -4974903464421335904, guid: 8499e52655ca21f488a1d2e8a9618626, type: 3}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 0
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &200901377
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 200901374}
-  m_Mesh: {fileID: -5736156301515729953, guid: 8499e52655ca21f488a1d2e8a9618626, type: 3}
 --- !u!1 &202240996
 GameObject:
   m_ObjectHideFlags: 0
@@ -14820,9 +14730,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 278199757}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: Rolo de Papel
+  codigoProduto: PAP-527
+  precoProduto: 12
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -18570,8 +18480,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.0009525814, y: 0.061737385, z: 0.025980547}
-  m_Center: {x: -0.07755263, y: -0.06037048, z: -0.15066049}
+  m_Size: {x: 0.025009159, y: 0.045399934, z: 0.025980547}
+  m_Center: {x: -0.08958124, y: -0.052201953, z: -0.15066049}
 --- !u!1 &357456978
 GameObject:
   m_ObjectHideFlags: 0
@@ -23859,9 +23769,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 429358325}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: Caixa de cereal
+  codigoProduto: CER-093
+  precoProduto: 15
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -24996,9 +24906,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 451172952}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: "\xC1gua"
+  codigoProduto: AGU-512
+  precoProduto: 5.5
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -29186,9 +29096,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 519415880}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: "Energ\xE9tico"
+  codigoProduto: RDB-158
+  precoProduto: 11.5
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -34387,7 +34297,6 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 1735378256}
   - {fileID: 429358325}
   - {fileID: 1091922116}
   - {fileID: 451172952}
@@ -34650,9 +34559,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 609243273}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: Refrigerante de Cola
+  codigoProduto: CCL-670
+  precoProduto: 5.5
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -53421,7 +53330,7 @@ Transform:
   m_GameObject: {fileID: 954567251}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -11.82, y: 1.268, z: 3.109}
+  m_LocalPosition: {x: -11.82, y: 1.533, z: 3.109}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -61463,9 +61372,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 1091922116}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: "A\xE7\xFAcar"
+  codigoProduto: ACU-517
+  precoProduto: 4.5
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -84259,9 +84168,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 1462922655}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: Batata de mel
+  codigoProduto: LAY-154
+  precoProduto: 15
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -91991,96 +91900,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1628239087}
   m_Mesh: {fileID: -8158130018243997048, guid: 8499e52655ca21f488a1d2e8a9618626, type: 3}
---- !u!1 &1631628645
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1631628646}
-  - component: {fileID: 1631628648}
-  - component: {fileID: 1631628647}
-  m_Layer: 0
-  m_Name: WC-Cleaner_Material.001_0
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1631628646
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1631628645}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1735378256}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!23 &1631628647
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1631628645}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 4855638414264437767, guid: 8499e52655ca21f488a1d2e8a9618626, type: 3}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 0
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &1631628648
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1631628645}
-  m_Mesh: {fileID: 8862939783333963555, guid: 8499e52655ca21f488a1d2e8a9618626, type: 3}
 --- !u!1 &1634506268
 GameObject:
   m_ObjectHideFlags: 0
@@ -98157,114 +97976,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1733884517}
   m_Mesh: {fileID: 4823408720566498418, guid: c96a05210e5699a449650cacfd3a0d2c, type: 3}
---- !u!1 &1735378255
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1735378256}
-  - component: {fileID: 1735378259}
-  - component: {fileID: 1735378258}
-  - component: {fileID: 1735378257}
-  m_Layer: 0
-  m_Name: Limpador de Banheiro
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1735378256
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1735378255}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -6.854, y: 0.6229999, z: 4.857}
-  m_LocalScale: {x: 0.067899995, y: 0.067899995, z: 0.049220003}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 200901375}
-  - {fileID: 1631628646}
-  m_Father: {fileID: 608296472}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!54 &1735378257
-Rigidbody:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1735378255}
-  serializedVersion: 5
-  m_Mass: 1
-  m_LinearDamping: 0
-  m_AngularDamping: 0.05
-  m_CenterOfMass: {x: 0, y: 0, z: 0}
-  m_InertiaTensor: {x: 1, y: 1, z: 1}
-  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ImplicitCom: 1
-  m_ImplicitTensor: 1
-  m_UseGravity: 0
-  m_IsKinematic: 1
-  m_Interpolate: 0
-  m_Constraints: 0
-  m_CollisionDetection: 0
---- !u!65 &1735378258
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1735378255}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Size: {x: 1, y: 1, z: 1}
-  m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &1735378259
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1735378255}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d80da078d1b06e946b77437a5df35653, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Pickup
-  produtoCompletoRoot: {fileID: 1735378256}
-  throwForce: 150
-  maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
-  descricaoProduto: 
-  destruirAposEscanear: 1
-  mensagemEscaneamento: 
-  duracaoMensagemEscaneamento: 2
-  iniciarTravadoNaPrateleira: 1
-  console: {fileID: 0}
 --- !u!1 &1735390090
 GameObject:
   m_ObjectHideFlags: 0
@@ -102799,9 +102510,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 1811954139}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: Batata Original
+  codigoProduto: LAY-151
+  precoProduto: 15
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -103749,9 +103460,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 1831406727}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: "Refrigerante C\xEDtrico"
+  codigoProduto: MDW-558
+  precoProduto: 7.5
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -105486,8 +105197,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.0009525814, y: 0.036896817, z: 0.025980547}
-  m_Center: {x: -0.07755263, y: -0.047950074, z: -0.15066049}
+  m_Size: {x: 0.022071049, y: 0.036896825, z: 0.025980547}
+  m_Center: {x: -0.06699385, y: -0.047950495, z: -0.15066049}
 --- !u!1 &1855071999
 GameObject:
   m_ObjectHideFlags: 0
@@ -108348,9 +108059,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 1891960436}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: Refrigerante de Laranja
+  codigoProduto: FNT-786
+  precoProduto: 5
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -110939,9 +110650,9 @@ MonoBehaviour:
   produtoCompletoRoot: {fileID: 1942326981}
   throwForce: 150
   maxDistance: 3
-  nomeProduto: 
-  codigoProduto: 
-  precoProduto: 0
+  nomeProduto: Batata Cheddar
+  codigoProduto: LAY-150
+  precoProduto: 15
   descricaoProduto: 
   destruirAposEscanear: 1
   mensagemEscaneamento: 
@@ -117244,7 +116955,7 @@ Transform:
   m_GameObject: {fileID: 2021358424}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 13, y: 0, z: 6.49}
+  m_LocalPosition: {x: 13, y: 1.12, z: 6.49}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
