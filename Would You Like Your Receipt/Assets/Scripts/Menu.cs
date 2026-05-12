@@ -5,15 +5,13 @@ using UnityEngine.UI;
 
 public class Menu : MonoBehaviour
 {
-    // Este script monta o menu principal por codigo.
-    // Ele cria botoes, telas de informacao, creditos, sinopse e controla sair/iniciar jogo.
     [Header("Textos editaveis")]
     [TextArea(3, 8)]
     [SerializeField] string textoCreditos =
         "Créditos\n\n" +
-        "Jogo criado por: Guilherme da Silva Montes, Kris Pascali Janjiulio, Pietra Augusto Farias Ruiz." +
-        "Arte e modelos: Skechtfab, Itch.io, Canva" +
-        "Professores: Victor Bruno Alexander Rosetti de Quiroz, Adriando Felix Valente, Renata Muniz de Nascimento, Eduardo Savino Gomes, Luis Fernando dos Santos Pires";
+        "Jogo criado por: Guilherme da Silva Montes, Kris Pascali Janjiulio, Pietra Augusto Farias Ruiz. +
+        "Programação: Guilherme da Silva Montes, Kris Pascali Janjiulio, Pietra Augusto Farias Ruiz." +
+        "Arte e modelos: Sketchfab e Itch.io" ;
 
     [TextArea(3, 8)]
     [SerializeField] string textoComoJogar =
@@ -39,7 +37,6 @@ public class Menu : MonoBehaviour
 
     void Start()
     {
-        // Procura um Canvas existente ou cria um novo caso a cena nao tenha um.
         canvasMenu = Object.FindFirstObjectByType<Canvas>();
         if (canvasMenu == null)
         {
@@ -55,14 +52,12 @@ public class Menu : MonoBehaviour
     // Abre a cena principal quando o jogador clica em jogar.
     public void PlayGame()
     {
-        // Botao Comecar: carrega a cena principal do jogo.
         SceneManager.LoadScene("Game");
     }
 
     // Fecha a aplicacao quando o jogador escolhe sair.
     public void QuitGame()
     {
-        // Botao Sair: fecha o jogo no build e para o Play Mode dentro do editor.
         Debug.Log("Saiu do jogo");
 
 #if UNITY_EDITOR
@@ -102,7 +97,6 @@ public class Menu : MonoBehaviour
 
     void MontarMenuPrincipal()
     {
-        // Cria os botoes principais em duas colunas e posiciona o botao Sair embaixo.
         RectTransform grupo = CriarAreaBotoes();
 
         Button botaoJogar = EncontrarBotao("StartButton");
@@ -125,7 +119,6 @@ public class Menu : MonoBehaviour
 
     RectTransform CriarAreaBotoes()
     {
-        // Cria um grupo fixo no rodape para os botoes nao cobrirem o titulo.
         GameObject grupoObject = new GameObject("MainMenuButtonArea");
         grupoBotoesMenu = grupoObject;
         grupoObject.transform.SetParent(canvasMenu.transform, false);
@@ -188,7 +181,6 @@ public class Menu : MonoBehaviour
 
     Button CriarBotaoMenu(Transform parent, string texto, UnityEngine.Events.UnityAction acao)
     {
-        // Cria um botao de menu limpo, sem herdar eventos antigos da cena.
         GameObject botaoObject = new GameObject(texto + "Button");
         botaoObject.transform.SetParent(parent, false);
         botaoObject.AddComponent<Image>();
@@ -232,7 +224,6 @@ public class Menu : MonoBehaviour
 
     void EstilizarBotao(Button botao)
     {
-        // Aplica o visual escuro/vermelho dos botoes do menu.
         if (botao == null)
         {
             return;
@@ -265,7 +256,6 @@ public class Menu : MonoBehaviour
 
     void EstilizarTextoBotao(TMP_Text texto)
     {
-        // Configura fonte, cor e sombra do texto dos botoes.
         texto.fontStyle = FontStyles.Bold | FontStyles.SmallCaps;
         texto.fontSize = 19f;
         texto.characterSpacing = 2f;
@@ -287,7 +277,6 @@ public class Menu : MonoBehaviour
 
     void CriarPainelInfo()
     {
-        // Cria a tela usada por Como Jogar, Sinopse e Creditos.
         painelInfo = new GameObject("InfoPanel");
         painelInfo.transform.SetParent(canvasMenu.transform, false);
         painelInfo.transform.SetAsLastSibling();
@@ -361,7 +350,6 @@ public class Menu : MonoBehaviour
 
     void MostrarPainel(string titulo, string corpo)
     {
-        // Mostra um painel de informacao e esconde os botoes principais enquanto ele estiver aberto.
         if (painelInfo == null)
         {
             CriarPainelInfo();
@@ -389,7 +377,6 @@ public class Menu : MonoBehaviour
 
     void ConfigurarCanvasResponsivo()
     {
-        // Ajusta o Canvas para adaptar a UI a diferentes resolucoes de tela.
         CanvasScaler scaler = canvasMenu.GetComponent<CanvasScaler>();
         if (scaler == null)
         {
