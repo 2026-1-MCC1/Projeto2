@@ -58,7 +58,7 @@ Há também 4 pastas que seguem da seguinte forma:
 
 Não há instalação! Apenas executável!
 Encontre WYLYR.exe na pasta executáveis e execute-o como qualquer outro programa.
-
+https://m0ntesp.itch.io/would-you-like-your-receipt
 ```sh
 Coloque código do prompt de comnando se for necessário
 ```
